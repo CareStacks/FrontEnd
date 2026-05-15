@@ -14,14 +14,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 import pe.edu.upc.careconnect.presentation.documents.DocumentsScreen
+import pe.edu.upc.careconnect.presentation.notifications.NotificationsScreen
 import pe.edu.upc.careconnect.presentation.theme.Primary
 import pe.edu.upc.careconnect.presentation.theme.Surface
 import pe.edu.upc.careconnect.presentation.theme.TextMuted
+
+private enum class MainOverlay {
+    Notifications
+}
 
 @Composable
 fun Main() {
     val selectedTab = rememberSaveable {
         mutableStateOf(MainTab.Home)
+    }
+    val overlay = rememberSaveable {
+        mutableStateOf<MainOverlay?>(null)
     }
 
     Scaffold(
@@ -60,32 +68,44 @@ fun Main() {
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            when (selectedTab.value) {
-                MainTab.Home -> {
-                    // Luego aquí irá HomeScreen()
-                    Text("Inicio", color = MaterialTheme.colorScheme.onBackground)
-                }
-
-                MainTab.Agenda -> {
-                    // Luego aquí irá AgendaScreen()
-                    Text("Agenda", color = MaterialTheme.colorScheme.onBackground)
-                }
-
-                MainTab.Documents -> {
-                    DocumentsScreen(
-                        onUploadClick = { },
-                        onNotificationsClick = { }
+            when (overlay.value) {
+                MainOverlay.Notifications -> {
+                    NotificationsScreen(
+                        onBackClick = { overlay.value = null }
                     )
                 }
 
-                MainTab.Diary -> {
-                    // Luego aquí irá DocumentsScreen()
-                    Text("Diario", color = MaterialTheme.colorScheme.onBackground)
-                }
+                null -> {
+                    when (selectedTab.value) {
+                        MainTab.Home -> {
+                            // Luego aquí irá HomeScreen()
+                            Text("Inicio", color = MaterialTheme.colorScheme.onBackground)
+                        }
 
-                MainTab.Profile -> {
-                    // Luego aquí irá ProfileScreen()
-                    Text("Perfil", color = MaterialTheme.colorScheme.onBackground)
+                        MainTab.Agenda -> {
+                            // Luego aquí irá AgendaScreen()
+                            Text("Agenda", color = MaterialTheme.colorScheme.onBackground)
+                        }
+
+                        MainTab.Documents -> {
+                            DocumentsScreen(
+                                onUploadClick = { },
+                                onNotificationsClick = {
+                                    overlay.value = MainOverlay.Notifications
+                                }
+                            )
+                        }
+
+                        MainTab.Diary -> {
+                            // Luego aquí irá DocumentsScreen()
+                            Text("Diario", color = MaterialTheme.colorScheme.onBackground)
+                        }
+
+                        MainTab.Profile -> {
+                            // Luego aquí irá ProfileScreen()
+                            Text("Perfil", color = MaterialTheme.colorScheme.onBackground)
+                        }
+                    }
                 }
             }
         }
