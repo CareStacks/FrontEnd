@@ -1,6 +1,7 @@
 package pe.edu.upc.careconnect.presentation.navigation
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -12,7 +13,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import pe.edu.upc.careconnect.presentation.agenda.AgendaScreen
 import pe.edu.upc.careconnect.presentation.components.AppIcon
+
+import pe.edu.upc.careconnect.presentation.home.HomeScreen
+=======
 import pe.edu.upc.careconnect.presentation.diary.DiaryScreen
 import pe.edu.upc.careconnect.presentation.diary.NewDiaryNoteScreen
 import pe.edu.upc.careconnect.presentation.documents.DocumentsScreen
@@ -20,6 +26,7 @@ import pe.edu.upc.careconnect.presentation.documents.UploadDocumentScreen
 import pe.edu.upc.careconnect.presentation.notifications.NotificationsScreen
 import pe.edu.upc.careconnect.presentation.profile.ProfileScreen
 import pe.edu.upc.careconnect.presentation.profile.ShareProfileScreen
+
 import pe.edu.upc.careconnect.presentation.theme.Primary
 import pe.edu.upc.careconnect.presentation.theme.Surface
 import pe.edu.upc.careconnect.presentation.theme.TextMuted
@@ -32,7 +39,11 @@ private enum class MainOverlay {
 }
 
 @Composable
-fun Main() {
+fun Main(
+    onRegisterEventClick: () -> Unit = {},
+    onEventDetailClick: () -> Unit = {},
+    onNotificationsClick: () -> Unit = {}
+) {
     val selectedTab = rememberSaveable {
         mutableStateOf(MainTab.Home)
     }
@@ -41,6 +52,12 @@ fun Main() {
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(
+            left = 0.dp,
+            top = 0.dp,
+            right = 0.dp,
+            bottom = 0.dp
+        ),
         bottomBar = {
             val showBottomBar = overlay.value != MainOverlay.UploadDocument &&
                 overlay.value != MainOverlay.NewDiaryNote &&
@@ -82,6 +99,49 @@ fun Main() {
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+
+            when (selectedTab.value) {
+                MainTab.Home -> {
+                    HomeScreen(
+                        onRegisterEventClick = onRegisterEventClick,
+                        onUploadDocumentClick = {
+                            // Luego navegará a UploadDocumentScreen
+                        },
+                        onWriteNoteClick = {
+                            // Luego navegará a NewNoteScreen
+                        },
+                        onNotificationsClick = onNotificationsClick
+                    )
+                }
+
+                MainTab.Agenda -> {
+                    AgendaScreen(
+                        onAddEventClick = onRegisterEventClick,
+                        onEventClick = onEventDetailClick,
+                        onNotificationsClick = onNotificationsClick
+                    )
+                }
+
+                MainTab.Documents -> {
+                    Text(
+                        text = "Documentos",
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                MainTab.Diary -> {
+                    Text(
+                        text = "Diario",
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                MainTab.Profile -> {
+                    Text(
+                        text = "Perfil",
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+=======
             when (overlay.value) {
                 MainOverlay.Notifications -> {
                     NotificationsScreen(
@@ -154,6 +214,7 @@ fun Main() {
                             )
                         }
                     }
+
                 }
             }
         }

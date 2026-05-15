@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import pe.edu.upc.careconnect.presentation.agenda.EventDetailScreen
+import pe.edu.upc.careconnect.presentation.agenda.RegisterEventScreen
 import pe.edu.upc.careconnect.presentation.login.LoginScreen
 import pe.edu.upc.careconnect.presentation.login.RegisterScreen
 import pe.edu.upc.careconnect.presentation.onboarding.OnBoarding
@@ -60,8 +62,46 @@ fun RootNavHost() {
             )
         }
 
+        composable<EventDetailRoute> {
+            EventDetailScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onNotificationsClick = {
+                    // Luego navegará a NotificationsScreen
+                },
+                onConfirmClick = {
+                    // Luego confirmará el evento
+                },
+                onRescheduleClick = {
+                    navController.navigate(RegisterEventRoute)
+                }
+            )
+        }
+
         composable<HomeRoute> {
-            Main()
+            Main(
+                onRegisterEventClick = {
+                    navController.navigate(RegisterEventRoute)
+                },
+                onEventDetailClick = {
+                    navController.navigate(EventDetailRoute)
+                },
+                onNotificationsClick = {
+                    // Luego navegará a NotificationsScreen
+                }
+            )
+        }
+
+        composable<RegisterEventRoute> {
+            RegisterEventScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onSaveClick = {
+                    navController.popBackStack()
+                }
+            )
         }
     }
 }
