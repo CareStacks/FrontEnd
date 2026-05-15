@@ -18,6 +18,8 @@ import pe.edu.upc.careconnect.presentation.diary.NewDiaryNoteScreen
 import pe.edu.upc.careconnect.presentation.documents.DocumentsScreen
 import pe.edu.upc.careconnect.presentation.documents.UploadDocumentScreen
 import pe.edu.upc.careconnect.presentation.notifications.NotificationsScreen
+import pe.edu.upc.careconnect.presentation.profile.ProfileScreen
+import pe.edu.upc.careconnect.presentation.profile.ShareProfileScreen
 import pe.edu.upc.careconnect.presentation.theme.Primary
 import pe.edu.upc.careconnect.presentation.theme.Surface
 import pe.edu.upc.careconnect.presentation.theme.TextMuted
@@ -25,7 +27,8 @@ import pe.edu.upc.careconnect.presentation.theme.TextMuted
 private enum class MainOverlay {
     Notifications,
     UploadDocument,
-    NewDiaryNote
+    NewDiaryNote,
+    ShareProfile
 }
 
 @Composable
@@ -40,7 +43,8 @@ fun Main() {
     Scaffold(
         bottomBar = {
             val showBottomBar = overlay.value != MainOverlay.UploadDocument &&
-                overlay.value != MainOverlay.NewDiaryNote
+                overlay.value != MainOverlay.NewDiaryNote &&
+                overlay.value != MainOverlay.ShareProfile
 
             if (showBottomBar) {
                 NavigationBar(
@@ -99,6 +103,12 @@ fun Main() {
                     )
                 }
 
+                MainOverlay.ShareProfile -> {
+                    ShareProfileScreen(
+                        onBackClick = { overlay.value = null }
+                    )
+                }
+
                 null -> {
                     when (selectedTab.value) {
                         MainTab.Home -> {
@@ -134,8 +144,14 @@ fun Main() {
                         }
 
                         MainTab.Profile -> {
-                            // Luego aquí irá ProfileScreen()
-                            Text("Perfil", color = MaterialTheme.colorScheme.onBackground)
+                            ProfileScreen(
+                                onManageAccessClick = {
+                                    overlay.value = MainOverlay.ShareProfile
+                                },
+                                onNotificationsClick = {
+                                    overlay.value = MainOverlay.Notifications
+                                }
+                            )
                         }
                     }
                 }
