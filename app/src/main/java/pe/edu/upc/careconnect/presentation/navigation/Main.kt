@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import pe.edu.upc.careconnect.presentation.components.AppIcon
+import pe.edu.upc.careconnect.presentation.diary.DiaryScreen
 import pe.edu.upc.careconnect.presentation.documents.DocumentsScreen
 import pe.edu.upc.careconnect.presentation.documents.UploadDocumentScreen
 import pe.edu.upc.careconnect.presentation.notifications.NotificationsScreen
@@ -110,8 +111,12 @@ fun Main() {
                         }
 
                         MainTab.Diary -> {
-                            // Luego aquí irá DocumentsScreen()
-                            Text("Diario", color = MaterialTheme.colorScheme.onBackground)
+                            DiaryScreen(
+                                onNewNoteClick = { },
+                                onNotificationsClick = {
+                                    overlay.value = MainOverlay.Notifications
+                                }
+                            )
                         }
 
                         MainTab.Profile -> {
