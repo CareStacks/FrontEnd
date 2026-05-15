@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import pe.edu.upc.careconnect.presentation.components.AppIcon
+import pe.edu.upc.careconnect.presentation.documents.DocumentsScreen
 import pe.edu.upc.careconnect.presentation.theme.Primary
 import pe.edu.upc.careconnect.presentation.theme.Surface
 import pe.edu.upc.careconnect.presentation.theme.TextMuted
@@ -71,8 +72,10 @@ fun Main() {
                 }
 
                 MainTab.Documents -> {
-                    // Luego aquí irá DocumentsScreen()
-                    Text("Documentos", color = MaterialTheme.colorScheme.onBackground)
+                    DocumentsScreen(
+                        onUploadClick = { },
+                        onNotificationsClick = { }
+                    )
                 }
 
                 MainTab.Diary -> {
