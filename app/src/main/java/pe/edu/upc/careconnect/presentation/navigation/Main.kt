@@ -14,13 +14,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 import pe.edu.upc.careconnect.presentation.documents.DocumentsScreen
+import pe.edu.upc.careconnect.presentation.documents.UploadDocumentScreen
 import pe.edu.upc.careconnect.presentation.notifications.NotificationsScreen
 import pe.edu.upc.careconnect.presentation.theme.Primary
 import pe.edu.upc.careconnect.presentation.theme.Surface
 import pe.edu.upc.careconnect.presentation.theme.TextMuted
 
 private enum class MainOverlay {
-    Notifications
+    Notifications,
+    UploadDocument
 }
 
 @Composable
@@ -34,31 +36,33 @@ fun Main() {
 
     Scaffold(
         bottomBar = {
-            NavigationBar(
-                containerColor = Surface
-            ) {
-                MainTab.entries.forEach { tab ->
-                    val selected = selectedTab.value == tab
+            if (overlay.value != MainOverlay.UploadDocument) {
+                NavigationBar(
+                    containerColor = Surface
+                ) {
+                    MainTab.entries.forEach { tab ->
+                        val selected = selectedTab.value == tab
 
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            selectedTab.value = tab
-                        },
-                        icon = {
-                            AppIcon(
-                                icon = if (selected) tab.filledIcon else tab.outlineIcon,
-                                contentDescription = tab.label,
-                                tint = if (selected) Primary else TextMuted
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = tab.label,
-                                color = if (selected) Primary else TextMuted
-                            )
-                        }
-                    )
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = {
+                                selectedTab.value = tab
+                            },
+                            icon = {
+                                AppIcon(
+                                    icon = if (selected) tab.filledIcon else tab.outlineIcon,
+                                    contentDescription = tab.label,
+                                    tint = if (selected) Primary else TextMuted
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = tab.label,
+                                    color = if (selected) Primary else TextMuted
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -72,6 +76,13 @@ fun Main() {
                 MainOverlay.Notifications -> {
                     NotificationsScreen(
                         onBackClick = { overlay.value = null }
+                    )
+                }
+
+                MainOverlay.UploadDocument -> {
+                    UploadDocumentScreen(
+                        onBackClick = { overlay.value = null },
+                        onDocumentSaved = { overlay.value = null }
                     )
                 }
 
@@ -89,7 +100,9 @@ fun Main() {
 
                         MainTab.Documents -> {
                             DocumentsScreen(
-                                onUploadClick = { },
+                                onUploadClick = {
+                                    overlay.value = MainOverlay.UploadDocument
+                                },
                                 onNotificationsClick = {
                                     overlay.value = MainOverlay.Notifications
                                 }
