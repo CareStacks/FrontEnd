@@ -1,6 +1,7 @@
 package pe.edu.upc.careconnect.presentation.navigation
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -12,18 +13,31 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import pe.edu.upc.careconnect.presentation.agenda.AgendaScreen
 import pe.edu.upc.careconnect.presentation.components.AppIcon
+import pe.edu.upc.careconnect.presentation.home.HomeScreen
 import pe.edu.upc.careconnect.presentation.theme.Primary
 import pe.edu.upc.careconnect.presentation.theme.Surface
 import pe.edu.upc.careconnect.presentation.theme.TextMuted
 
 @Composable
-fun Main() {
+fun Main(
+    onRegisterEventClick: () -> Unit = {},
+    onEventDetailClick: () -> Unit = {},
+    onNotificationsClick: () -> Unit = {}
+) {
     val selectedTab = rememberSaveable {
         mutableStateOf(MainTab.Home)
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(
+            left = 0.dp,
+            top = 0.dp,
+            right = 0.dp,
+            bottom = 0.dp
+        ),
         bottomBar = {
             NavigationBar(
                 containerColor = Surface
@@ -61,28 +75,45 @@ fun Main() {
         ) {
             when (selectedTab.value) {
                 MainTab.Home -> {
-                    // Luego aquí irá HomeScreen()
-                    Text("Inicio", color = MaterialTheme.colorScheme.onBackground)
+                    HomeScreen(
+                        onRegisterEventClick = onRegisterEventClick,
+                        onUploadDocumentClick = {
+                            // Luego navegará a UploadDocumentScreen
+                        },
+                        onWriteNoteClick = {
+                            // Luego navegará a NewNoteScreen
+                        },
+                        onNotificationsClick = onNotificationsClick
+                    )
                 }
 
                 MainTab.Agenda -> {
-                    // Luego aquí irá AgendaScreen()
-                    Text("Agenda", color = MaterialTheme.colorScheme.onBackground)
+                    AgendaScreen(
+                        onAddEventClick = onRegisterEventClick,
+                        onEventClick = onEventDetailClick,
+                        onNotificationsClick = onNotificationsClick
+                    )
                 }
 
                 MainTab.Documents -> {
-                    // Luego aquí irá DocumentsScreen()
-                    Text("Documentos", color = MaterialTheme.colorScheme.onBackground)
+                    Text(
+                        text = "Documentos",
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
                 }
 
                 MainTab.Diary -> {
-                    // Luego aquí irá DocumentsScreen()
-                    Text("Diario", color = MaterialTheme.colorScheme.onBackground)
+                    Text(
+                        text = "Diario",
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
                 }
 
                 MainTab.Profile -> {
-                    // Luego aquí irá ProfileScreen()
-                    Text("Perfil", color = MaterialTheme.colorScheme.onBackground)
+                    Text(
+                        text = "Perfil",
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
                 }
             }
         }
