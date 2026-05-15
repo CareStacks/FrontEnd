@@ -18,7 +18,7 @@ import pe.edu.upc.careconnect.presentation.agenda.AgendaScreen
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 
 import pe.edu.upc.careconnect.presentation.home.HomeScreen
-=======
+
 import pe.edu.upc.careconnect.presentation.diary.DiaryScreen
 import pe.edu.upc.careconnect.presentation.diary.NewDiaryNoteScreen
 import pe.edu.upc.careconnect.presentation.documents.DocumentsScreen
@@ -60,8 +60,8 @@ fun Main(
         ),
         bottomBar = {
             val showBottomBar = overlay.value != MainOverlay.UploadDocument &&
-                overlay.value != MainOverlay.NewDiaryNote &&
-                overlay.value != MainOverlay.ShareProfile
+                    overlay.value != MainOverlay.NewDiaryNote &&
+                    overlay.value != MainOverlay.ShareProfile
 
             if (showBottomBar) {
                 NavigationBar(
@@ -141,7 +141,9 @@ fun Main(
                         text = "Perfil",
                         color = MaterialTheme.colorScheme.onBackground
                     )
-=======
+                }
+            }
+
             when (overlay.value) {
                 MainOverlay.Notifications -> {
                     NotificationsScreen(
