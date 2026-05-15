@@ -14,6 +14,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 import pe.edu.upc.careconnect.presentation.diary.DiaryScreen
+import pe.edu.upc.careconnect.presentation.diary.NewDiaryNoteScreen
 import pe.edu.upc.careconnect.presentation.documents.DocumentsScreen
 import pe.edu.upc.careconnect.presentation.documents.UploadDocumentScreen
 import pe.edu.upc.careconnect.presentation.notifications.NotificationsScreen
@@ -23,7 +24,8 @@ import pe.edu.upc.careconnect.presentation.theme.TextMuted
 
 private enum class MainOverlay {
     Notifications,
-    UploadDocument
+    UploadDocument,
+    NewDiaryNote
 }
 
 @Composable
@@ -37,7 +39,10 @@ fun Main() {
 
     Scaffold(
         bottomBar = {
-            if (overlay.value != MainOverlay.UploadDocument) {
+            val showBottomBar = overlay.value != MainOverlay.UploadDocument &&
+                overlay.value != MainOverlay.NewDiaryNote
+
+            if (showBottomBar) {
                 NavigationBar(
                     containerColor = Surface
                 ) {
@@ -87,6 +92,13 @@ fun Main() {
                     )
                 }
 
+                MainOverlay.NewDiaryNote -> {
+                    NewDiaryNoteScreen(
+                        onBackClick = { overlay.value = null },
+                        onNoteSaved = { overlay.value = null }
+                    )
+                }
+
                 null -> {
                     when (selectedTab.value) {
                         MainTab.Home -> {
@@ -112,7 +124,9 @@ fun Main() {
 
                         MainTab.Diary -> {
                             DiaryScreen(
-                                onNewNoteClick = { },
+                                onNewNoteClick = {
+                                    overlay.value = MainOverlay.NewDiaryNote
+                                },
                                 onNotificationsClick = {
                                     overlay.value = MainOverlay.Notifications
                                 }
