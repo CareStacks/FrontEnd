@@ -1,3 +1,4 @@
+
 <!--
   ~ Copyright (C) 2026 The Android Open Source Project
   ~
@@ -21,4 +22,14 @@
   <path
       android:pathData="M120,720v-80h720v80L120,720ZM120,520v-80h720v80L120,520ZM120,320v-80h720v80L120,320Z"
       android:fillColor="#1f1f1f"/>
+=======
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M4,6h16v2H4V6ZM4,11h16v2H4v-2ZM4,16h16v2H4v-2Z" />
+
 </vector>
