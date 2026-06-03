@@ -11,9 +11,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import pe.edu.upc.careconnect.data.repository.AuthRepository
 import pe.edu.upc.careconnect.presentation.agenda.AgendaScreen
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 
@@ -41,9 +44,11 @@ private enum class MainOverlay {
 @Composable
 fun Main(
     onRegisterEventClick: () -> Unit = {},
-    onEventDetailClick: () -> Unit = {},
+    onEventDetailClick: (String) -> Unit = {},
     onNotificationsClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val authRepository = remember(context) { AuthRepository.getInstance(context) }
     val selectedTab = rememberSaveable {
         mutableStateOf(MainTab.Home)
     }
@@ -100,50 +105,6 @@ fun Main(
                 .padding(paddingValues)
         ) {
 
-            when (selectedTab.value) {
-                MainTab.Home -> {
-                    HomeScreen(
-                        onRegisterEventClick = onRegisterEventClick,
-                        onUploadDocumentClick = {
-                            // Luego navegará a UploadDocumentScreen
-                        },
-                        onWriteNoteClick = {
-                            // Luego navegará a NewNoteScreen
-                        },
-                        onNotificationsClick = onNotificationsClick
-                    )
-                }
-
-                MainTab.Agenda -> {
-                    AgendaScreen(
-                        onAddEventClick = onRegisterEventClick,
-                        onEventClick = onEventDetailClick,
-                        onNotificationsClick = onNotificationsClick
-                    )
-                }
-
-                MainTab.Documents -> {
-                    Text(
-                        text = "Documentos",
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-
-                MainTab.Diary -> {
-                    Text(
-                        text = "Diario",
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-
-                MainTab.Profile -> {
-                    Text(
-                        text = "Perfil",
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-            }
-
             when (overlay.value) {
                 MainOverlay.Notifications -> {
                     NotificationsScreen(
@@ -174,13 +135,29 @@ fun Main(
                 null -> {
                     when (selectedTab.value) {
                         MainTab.Home -> {
-                            // Luego aquí irá HomeScreen()
-                            Text("Inicio", color = MaterialTheme.colorScheme.onBackground)
+                            HomeScreen(
+                                userName = authRepository.currentUserName()?.substringBefore(' ') ?: "Mariana",
+                                onRegisterEventClick = onRegisterEventClick,
+                                onUploadDocumentClick = {
+                                    overlay.value = MainOverlay.UploadDocument
+                                },
+                                onWriteNoteClick = {
+                                    overlay.value = MainOverlay.NewDiaryNote
+                                },
+                                onNotificationsClick = {
+                                    overlay.value = MainOverlay.Notifications
+                                }
+                            )
                         }
 
                         MainTab.Agenda -> {
-                            // Luego aquí irá AgendaScreen()
-                            Text("Agenda", color = MaterialTheme.colorScheme.onBackground)
+                            AgendaScreen(
+                                onAddEventClick = onRegisterEventClick,
+                                onEventClick = onEventDetailClick,
+                                onNotificationsClick = {
+                                    overlay.value = MainOverlay.Notifications
+                                }
+                            )
                         }
 
                         MainTab.Documents -> {

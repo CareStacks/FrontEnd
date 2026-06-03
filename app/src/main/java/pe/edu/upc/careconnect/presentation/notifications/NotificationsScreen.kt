@@ -21,7 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -62,9 +64,10 @@ fun NotificationsScreen(
     val context = LocalContext.current
     val repository = remember(context) { CareCacheRepository.getInstance(context) }
     val notifications by repository.notifications.collectAsState(initial = emptyList())
+    var syncError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(repository) {
-        repository.seedIfEmpty()
+        syncError = repository.safeSyncNotifications().exceptionOrNull()?.message
     }
 
     Column(
@@ -89,7 +92,15 @@ fun NotificationsScreen(
                 .padding(top = 40.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            NotificationSummaryCard()
+            NotificationSummaryCard(notifications = notifications)
+
+            syncError?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
 
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 notifications.forEach { notification ->
@@ -109,7 +120,15 @@ fun NotificationsScreen(
 }
 
 @Composable
-private fun NotificationSummaryCard() {
+private fun NotificationSummaryCard(notifications: List<CachedNotificationEntity>) {
+    val pendingAlerts = notifications.count { it.statusTone == "error" || it.statusTone == "warning" }
+    val summaryText = when {
+        notifications.isEmpty() -> "No hay notificaciones sincronizadas todavía."
+        pendingAlerts == 0 -> "No tienes alertas pendientes de revisión."
+        pendingAlerts == 1 -> "Tienes 1 alerta pendiente de revisión."
+        else -> "Tienes $pendingAlerts alertas pendientes de revisión."
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -144,7 +163,7 @@ private fun NotificationSummaryCard() {
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    text = "Tienes 2 alertas pendientes de revisión.",
+                    text = summaryText,
                     style = MaterialTheme.typography.bodyLarge,
                     color = TextSecondary
                 )

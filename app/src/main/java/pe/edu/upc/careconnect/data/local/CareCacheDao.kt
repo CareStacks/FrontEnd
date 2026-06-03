@@ -26,6 +26,15 @@ interface CareCacheDao {
     @Query("SELECT COUNT(*) FROM cached_notifications")
     suspend fun countNotifications(): Int
 
+    @Query("DELETE FROM cached_documents")
+    suspend fun clearDocuments()
+
+    @Query("DELETE FROM cached_diary_notes")
+    suspend fun clearDiaryNotes()
+
+    @Query("DELETE FROM cached_notifications")
+    suspend fun clearNotifications()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertDocuments(documents: List<CachedDocumentEntity>)
 
@@ -40,4 +49,7 @@ interface CareCacheDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertNotifications(notifications: List<CachedNotificationEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertNotification(notification: CachedNotificationEntity)
 }

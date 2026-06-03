@@ -27,7 +27,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -67,9 +69,10 @@ fun DiaryScreen(
     val context = LocalContext.current
     val repository = remember(context) { CareCacheRepository.getInstance(context) }
     val notes by repository.diaryNotes.collectAsState(initial = emptyList())
+    var syncError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(repository) {
-        repository.seedIfEmpty()
+        syncError = repository.safeSyncDiaryNotes().exceptionOrNull()?.message
     }
 
     Column(
@@ -91,6 +94,14 @@ fun DiaryScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             DiaryTitleSection(onNewNoteClick = onNewNoteClick)
+
+            syncError?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
 
             Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
                 notes.forEach { note ->
