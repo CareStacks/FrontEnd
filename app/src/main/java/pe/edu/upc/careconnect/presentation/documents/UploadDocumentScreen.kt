@@ -1,5 +1,11 @@
 package pe.edu.upc.careconnect.presentation.documents
 
+import android.net.Uri
+import android.provider.OpenableColumns
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -34,7 +40,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +54,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import pe.edu.upc.careconnect.R
+import pe.edu.upc.careconnect.data.remote.toUserMessage
 import pe.edu.upc.careconnect.data.repository.CareCacheRepository
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 import pe.edu.upc.careconnect.presentation.components.CareScreenHeader
@@ -77,22 +83,22 @@ fun UploadDocumentScreen(
     val repository = remember(context) { CareCacheRepository.getInstance(context) }
     val scope = rememberCoroutineScope()
     val documentTypes = remember { listOf("PDF", "Digital", "Imagen", "DOCX") }
+    var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
     var selectedFileName by remember { mutableStateOf<String?>(null) }
     var selectedType by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var documentDate by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isSaving by remember { mutableStateOf(false) }
 
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri ->
+            selectedFileUri = uri
             selectedFileName = uri?.lastPathSegment?.substringAfterLast('/')
         }
     )
-
-    LaunchedEffect(repository) {
-        repository.seedIfEmpty()
-    }
 
     Column(
         modifier = modifier
@@ -183,15 +189,39 @@ fun UploadDocumentScreen(
 
                 Button(
                     onClick = {
+                        errorMessage = null
+
+                        val fileUri = selectedFileUri
+                        if (fileUri == null) {
+                            errorMessage = "Seleccioná un archivo antes de continuar."
+                            return@Button
+                        }
+
+                        if (selectedType.isBlank()) {
+                            errorMessage = "Elegí el tipo de documento."
+                            return@Button
+                        }
+
                         scope.launch {
-                            repository.saveDocument(
-                                type = selectedType,
-                                description = description.ifBlank {
-                                    selectedFileName ?: "Documento médico"
-                                },
-                                date = documentDate
-                            )
-                            onDocumentSaved()
+                            isSaving = true
+                            runCatching {
+                                repository.saveDocument(
+                                    documentType = selectedType.toBackendDocumentType(),
+                                    title = selectedFileName ?: "Documento médico",
+                                    description = description.ifBlank {
+                                        selectedFileName ?: "Documento médico"
+                                    },
+                                    fileUri = fileUri,
+                                    mimeType = context.contentResolver.getType(fileUri) ?: "application/octet-stream",
+                                    fileSizeBytes = context.contentResolver.readFileSize(fileUri),
+                                    uploadedAt = parseDocumentDate(documentDate)
+                                )
+                            }.onSuccess {
+                                onDocumentSaved()
+                            }.onFailure { throwable ->
+                                errorMessage = throwable.toUserMessage("No se pudo subir el documento")
+                            }
+                            isSaving = false
                         }
                     },
                     modifier = Modifier
@@ -211,9 +241,18 @@ fun UploadDocumentScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Subir documento",
+                        text = if (isSaving) "Subiendo..." else "Subir documento",
                         style = MaterialTheme.typography.bodyLarge,
                         color = Surface
+                    )
+                }
+
+                errorMessage?.let { message ->
+                    Text(
+                        text = message,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
 
@@ -384,6 +423,46 @@ private fun uploadTextFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = TextPrimary,
     unfocusedTextColor = TextPrimary
 )
+
+private fun String.toBackendDocumentType(): String {
+    return when (this) {
+        "PDF" -> "CLINICAL_REPORT"
+        "Digital" -> "PRESCRIPTION"
+        "Imagen" -> "IMAGING"
+        "DOCX" -> "OTHER"
+        else -> "OTHER"
+    }
+}
+
+private fun android.content.ContentResolver.readFileSize(uri: Uri): Long {
+    query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) {
+            val columnIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+            if (columnIndex >= 0) {
+                return cursor.getLong(columnIndex)
+            }
+        }
+    }
+
+    return 1L
+}
+
+private fun parseDocumentDate(rawValue: String): LocalDateTime? {
+    if (rawValue.isBlank()) {
+        return null
+    }
+
+    val formatters = listOf(
+        DateTimeFormatter.ofPattern("MM/dd/yyyy", Locale.US),
+        DateTimeFormatter.ofPattern("M/d/yyyy", Locale.US)
+    )
+
+    return formatters.firstNotNullOfOrNull { formatter ->
+        runCatching {
+            LocalDate.parse(rawValue.trim(), formatter).atStartOfDay()
+        }.getOrNull()
+    }
+}
 
 @Composable
 private fun UploadTipsSection() {

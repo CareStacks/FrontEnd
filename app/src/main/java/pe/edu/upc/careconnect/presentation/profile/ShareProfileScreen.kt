@@ -35,11 +35,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import java.util.UUID
 import pe.edu.upc.careconnect.R
+import pe.edu.upc.careconnect.data.session.SessionManager
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 import pe.edu.upc.careconnect.presentation.components.CareScreenHeader
 import pe.edu.upc.careconnect.presentation.theme.Background
@@ -57,10 +60,15 @@ fun ShareProfileScreen(
     onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val sessionManager = remember(context) { SessionManager.getInstance(context) }
+    val isCaregiver = sessionManager.userRole == "CAREGIVER"
     var caregiverEmail by remember { mutableStateOf("") }
     var agendaAccess by remember { mutableStateOf(true) }
     var documentsAccess by remember { mutableStateOf(true) }
     var diaryAccess by remember { mutableStateOf(false) }
+    var activePatientId by remember { mutableStateOf(sessionManager.activePatientId.orEmpty()) }
+    var patientContextMessage by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = modifier
@@ -68,7 +76,7 @@ fun ShareProfileScreen(
             .background(Background)
     ) {
         CareScreenHeader(
-            title = "Compartir perfil",
+            title = if (isCaregiver) "Paciente activo" else "Compartir perfil",
             navigationIcon = R.drawable.ic_arrow_back,
             navigationContentDescription = "Volver al perfil",
             onNavigationClick = onBackClick,
@@ -84,24 +92,52 @@ fun ShareProfileScreen(
                 .padding(top = 24.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            ShareHero()
-            ShareForm(
-                caregiverEmail = caregiverEmail,
-                onCaregiverEmailChange = { caregiverEmail = it },
-                agendaAccess = agendaAccess,
-                onAgendaAccessChange = { agendaAccess = it },
-                documentsAccess = documentsAccess,
-                onDocumentsAccessChange = { documentsAccess = it },
-                diaryAccess = diaryAccess,
-                onDiaryAccessChange = { diaryAccess = it }
-            )
-            ShareProfileAction()
+            ShareHero(isCaregiver = isCaregiver)
+
+            if (isCaregiver) {
+                CaregiverPatientContextCard(
+                    activePatientId = activePatientId,
+                    onActivePatientIdChange = {
+                        activePatientId = it
+                        patientContextMessage = null
+                    },
+                    onSaveClick = {
+                        val trimmedValue = activePatientId.trim()
+                        patientContextMessage = when {
+                            trimmedValue.isBlank() -> {
+                                sessionManager.clearActivePatientId()
+                                activePatientId = ""
+                                "Paciente activo eliminado."
+                            }
+                            trimmedValue.isValidUuid() -> {
+                                sessionManager.saveActivePatientId(trimmedValue)
+                                activePatientId = trimmedValue
+                                "Paciente activo guardado correctamente."
+                            }
+                            else -> "Ingresá un UUID de paciente válido."
+                        }
+                    },
+                    message = patientContextMessage
+                )
+            } else {
+                ShareForm(
+                    caregiverEmail = caregiverEmail,
+                    onCaregiverEmailChange = { caregiverEmail = it },
+                    agendaAccess = agendaAccess,
+                    onAgendaAccessChange = { agendaAccess = it },
+                    documentsAccess = documentsAccess,
+                    onDocumentsAccessChange = { documentsAccess = it },
+                    diaryAccess = diaryAccess,
+                    onDiaryAccessChange = { diaryAccess = it }
+                )
+                ShareProfileAction()
+            }
         }
     }
 }
 
 @Composable
-private fun ShareHero() {
+private fun ShareHero(isCaregiver: Boolean) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -122,12 +158,91 @@ private fun ShareHero() {
         }
 
         Text(
-            text = "Permite que un cuidador acceda a tu información de cuidado.",
+            text = if (isCaregiver) {
+                "Definí qué paciente querés gestionar con tu cuenta cuidadora."
+            } else {
+                "Permite que un cuidador acceda a tu información de cuidado."
+            },
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.titleMedium,
             color = TextSecondary,
             fontWeight = FontWeight.Normal
         )
+    }
+}
+
+@Composable
+private fun CaregiverPatientContextCard(
+    activePatientId: String,
+    onActivePatientIdChange: (String) -> Unit,
+    onSaveClick: () -> Unit,
+    message: String?
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, Border),
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Paciente activo",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "El backend actual no expone relaciones caregiver-patient. Para usar agenda, diario y documentos con una cuenta CAREGIVER, guardá manualmente el UUID del paciente activo.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextSecondary
+            )
+            OutlinedTextField(
+                value = activePatientId,
+                onValueChange = onActivePatientIdChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = {
+                    Text(text = "UUID del paciente", color = TextMuted)
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Primary,
+                    unfocusedBorderColor = Border,
+                    cursorColor = Primary,
+                    focusedContainerColor = Surface,
+                    unfocusedContainerColor = Surface,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
+                )
+            )
+            Button(
+                onClick = onSaveClick,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(999.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Primary,
+                    contentColor = PrimaryLight
+                )
+            ) {
+                Text(
+                    text = "Guardar paciente activo",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = PrimaryLight,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            message?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (it.contains("correctamente") || it.contains("eliminado")) Primary else MaterialTheme.colorScheme.error
+                )
+            }
+        }
     }
 }
 
@@ -321,6 +436,10 @@ private fun ShareProfileAction() {
             color = TextSecondary
         )
     }
+}
+
+private fun String.isValidUuid(): Boolean {
+    return runCatching { UUID.fromString(this) }.isSuccess
 }
 
 @Preview(showBackground = true, showSystemUi = true)

@@ -1,6 +1,7 @@
 package pe.edu.upc.careconnect.presentation.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.navigation.toRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -31,7 +32,7 @@ fun RootNavHost() {
 
         composable<LoginRoute> {
             LoginScreen(
-                onLoginClick = {
+                onLoginSuccess = {
                     navController.navigate(HomeRoute)
                 },
                 onCreateAccountClick = {
@@ -49,7 +50,7 @@ fun RootNavHost() {
                         }
                     }
                 },
-                onCreateAccountClick = {
+                onCreateAccountSuccess = {
                     navController.navigate(HomeRoute)
                 },
                 onLoginClick = {
@@ -62,20 +63,17 @@ fun RootNavHost() {
             )
         }
 
-        composable<EventDetailRoute> {
+        composable<EventDetailRoute> { backStackEntry ->
+            val route = backStackEntry.toRoute<EventDetailRoute>()
             EventDetailScreen(
+                eventId = route.eventId,
                 onBackClick = {
                     navController.popBackStack()
                 },
                 onNotificationsClick = {
                     // Luego navegará a NotificationsScreen
                 },
-                onConfirmClick = {
-                    // Luego confirmará el evento
-                },
-                onRescheduleClick = {
-                    navController.navigate(RegisterEventRoute)
-                }
+                onEventUpdated = {}
             )
         }
 
@@ -84,8 +82,8 @@ fun RootNavHost() {
                 onRegisterEventClick = {
                     navController.navigate(RegisterEventRoute)
                 },
-                onEventDetailClick = {
-                    navController.navigate(EventDetailRoute)
+                onEventDetailClick = { eventId ->
+                    navController.navigate(EventDetailRoute(eventId))
                 },
                 onNotificationsClick = {
                     // Luego navegará a NotificationsScreen

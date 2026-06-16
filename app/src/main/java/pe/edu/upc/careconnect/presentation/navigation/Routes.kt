@@ -24,4 +24,4 @@ object AgendaRoute
 object RegisterEventRoute
 
 @Serializable
-object EventDetailRoute
+data class EventDetailRoute(val eventId: String)

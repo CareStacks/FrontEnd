@@ -30,12 +30,16 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -45,7 +49,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import pe.edu.upc.careconnect.R
+import pe.edu.upc.careconnect.data.remote.toUserMessage
+import pe.edu.upc.careconnect.data.repository.AuthRepository
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 import pe.edu.upc.careconnect.presentation.components.FilledButton
 import pe.edu.upc.careconnect.presentation.theme.Background
@@ -66,16 +73,21 @@ private enum class RegisterRole {
 @Composable
 fun RegisterScreen(
     onBackClick: () -> Unit,
-    onCreateAccountClick: () -> Unit,
+    onCreateAccountSuccess: () -> Unit,
     onLoginClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val authRepository = remember(context) { AuthRepository.getInstance(context) }
+    val scope = rememberCoroutineScope()
     val fullName = remember { mutableStateOf("") }
     val email = remember { mutableStateOf("") }
     val password = remember { mutableStateOf("") }
     val passwordVisible = remember { mutableStateOf(false) }
     val selectedRole = remember { mutableStateOf(RegisterRole.Patient) }
     val acceptedTerms = remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -267,10 +279,46 @@ fun RegisterScreen(
         Spacer(modifier = Modifier.height(36.dp))
 
         FilledButton(
-            text = "Crear cuenta  →",
-            onClick = onCreateAccountClick,
+            text = if (isLoading) "Creando cuenta..." else "Crear cuenta  →",
+            onClick = {
+                errorMessage = null
+
+                when {
+                    fullName.value.isBlank() -> errorMessage = "Ingresá tu nombre completo."
+                    email.value.isBlank() -> errorMessage = "Ingresá tu correo electrónico."
+                    password.value.length < 8 -> errorMessage = "La contraseña debe tener al menos 8 caracteres."
+                    !acceptedTerms.value -> errorMessage = "Tenés que aceptar los términos para continuar."
+                    else -> {
+                        scope.launch {
+                            isLoading = true
+                            runCatching {
+                                authRepository.register(
+                                    fullName = fullName.value.trim(),
+                                    email = email.value.trim(),
+                                    password = password.value,
+                                    role = if (selectedRole.value == RegisterRole.Patient) "PATIENT" else "CAREGIVER"
+                                )
+                            }.onSuccess {
+                                onCreateAccountSuccess()
+                            }.onFailure { throwable ->
+                                errorMessage = throwable.toUserMessage("No se pudo crear la cuenta")
+                            }
+                            isLoading = false
+                        }
+                    }
+                }
+            },
             enabled = true
         )
+
+        errorMessage?.let { message ->
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = message,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
 
         Spacer(modifier = Modifier.height(56.dp))
 
@@ -414,7 +462,7 @@ private fun RegisterScreenPreview() {
     CareConnectTheme {
         RegisterScreen(
             onBackClick = { },
-            onCreateAccountClick = { },
+            onCreateAccountSuccess = { },
             onLoginClick = { }
         )
     }

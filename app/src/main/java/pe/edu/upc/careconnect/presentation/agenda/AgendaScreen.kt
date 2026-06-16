@@ -29,16 +29,24 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import pe.edu.upc.careconnect.R
+import pe.edu.upc.careconnect.data.remote.HealthEventDto
+import pe.edu.upc.careconnect.data.repository.AgendaRepository
 import pe.edu.upc.careconnect.presentation.theme.Background
 import pe.edu.upc.careconnect.presentation.theme.Border
 import pe.edu.upc.careconnect.presentation.theme.Neutral
@@ -53,9 +61,25 @@ import pe.edu.upc.careconnect.presentation.theme.TextSecondary
 fun AgendaScreen(
     modifier: Modifier = Modifier,
     onAddEventClick: () -> Unit = {},
-    onEventClick: () -> Unit = {},
+    onEventClick: (String) -> Unit = {},
     onNotificationsClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val agendaRepository = remember(context) { AgendaRepository.getInstance(context) }
+    var events by remember { mutableStateOf<List<HealthEventDto>>(emptyList()) }
+    var syncError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(agendaRepository) {
+        runCatching {
+            agendaRepository.getAgendaEvents()
+        }.onSuccess { loadedEvents ->
+            events = loadedEvents
+            syncError = null
+        }.onFailure { throwable ->
+            syncError = throwable.message
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -86,43 +110,41 @@ fun AgendaScreen(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                EventCard(
-                    time = "09:00",
-                    period = "AM",
-                    title = "Toma de\nMedicación",
-                    description = "Pastilla azul y suplemento\nvitamínico.",
-                    status = "COMPLETADO",
-                    statusBackground = Secondary.copy(alpha = 0.8f),
-                    statusTextColor = Color(0xFF4E6F61),
-                    onClick = onEventClick
-                )
+                syncError?.let { message ->
+                    Text(
+                        text = message,
+                        color = Color(0xFFB91C1C),
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                if (events.isEmpty()) {
+                    Text(
+                        text = "No hay eventos cargados todavía.",
+                        color = TextSecondary,
+                        fontSize = 16.sp
+                    )
+                } else {
+                    events.forEachIndexed { index, event ->
+                        val statusColors = agendaStatusColors(event.status)
+                        EventCard(
+                            time = agendaTime(event.startAt),
+                            period = agendaPeriod(event.startAt),
+                            title = event.title,
+                            description = event.description.orEmpty().ifBlank { "Sin descripción" },
+                            status = event.status.toAgendaStatusLabel(),
+                            statusBackground = statusColors.background,
+                            statusTextColor = statusColors.content,
+                            accentColor = statusColors.accent,
+                            onClick = { onEventClick(event.id) }
+                        )
 
-                EventCard(
-                    time = "11:30",
-                    period = "AM",
-                    title = "Paseo Jardín",
-                    description = "30 min de caminata suave\nasistida.",
-                    status = "PRÓXIMO",
-                    statusBackground = Color(0xFFB36A18),
-                    statusTextColor = Color.White,
-                    accentColor = Color(0xFFB36A18),
-                    onClick = onEventClick
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                EventCard(
-                    time = "02:00",
-                    period = "PM",
-                    title = "Cita Médica",
-                    description = "Revisión mensual con Dr.\nAranda.",
-                    status = "PENDIENTE",
-                    statusBackground = Primary.copy(alpha = 0.16f),
-                    statusTextColor = Neutral,
-                    onClick = onEventClick
-                )
+                        if (index != events.lastIndex) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                        }
+                    }
+                }
             }
         }
 
@@ -145,6 +167,58 @@ fun AgendaScreen(
             )
         }
     }
+}
+
+private data class AgendaStatusColors(
+    val background: Color,
+    val content: Color,
+    val accent: Color = Primary
+)
+
+private fun agendaStatusColors(status: String): AgendaStatusColors {
+    return when (status) {
+        "CONFIRMED" -> AgendaStatusColors(
+            background = Secondary.copy(alpha = 0.8f),
+            content = Color(0xFF4E6F61),
+            accent = Color(0xFF4E6F61)
+        )
+        "PENDING" -> AgendaStatusColors(
+            background = Primary.copy(alpha = 0.16f),
+            content = Neutral,
+            accent = Primary
+        )
+        "MISSED" -> AgendaStatusColors(
+            background = Color(0xFFB91C1C),
+            content = Color.White,
+            accent = Color(0xFFB91C1C)
+        )
+        else -> AgendaStatusColors(
+            background = Color(0xFFB36A18),
+            content = Color.White,
+            accent = Color(0xFFB36A18)
+        )
+    }
+}
+
+private fun String.toAgendaStatusLabel(): String {
+    return when (this) {
+        "CONFIRMED" -> "COMPLETADO"
+        "PENDING" -> "PENDIENTE"
+        "MISSED" -> "INCUMPLIDO"
+        "CANCELLED" -> "CANCELADO"
+        else -> this
+    }
+}
+
+private fun agendaTime(rawValue: String?): String {
+    return AgendaRepository.formatEventTimeRange(rawValue, null)
+        .substringBefore(' ')
+        .ifBlank { "--:--" }
+}
+
+private fun agendaPeriod(rawValue: String?): String {
+    return AgendaRepository.formatEventTimeRange(rawValue, null)
+        .substringAfterLast(' ', "")
 }
 
 @Composable

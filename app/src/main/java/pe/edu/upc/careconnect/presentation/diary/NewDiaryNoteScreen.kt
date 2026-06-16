@@ -40,6 +40,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import pe.edu.upc.careconnect.R
+import pe.edu.upc.careconnect.data.remote.toUserMessage
 import pe.edu.upc.careconnect.data.repository.CareCacheRepository
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 import pe.edu.upc.careconnect.presentation.components.CareScreenHeader
@@ -67,10 +68,8 @@ fun NewDiaryNoteScreen(
     val scope = rememberCoroutineScope()
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
-
-    LaunchedEffect(repository) {
-        repository.seedIfEmpty()
-    }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isSaving by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -136,12 +135,26 @@ fun NewDiaryNoteScreen(
             ) {
                 Button(
                     onClick = {
+                        errorMessage = null
+
+                        if (content.isBlank()) {
+                            errorMessage = "Escribí el contenido de la nota antes de guardarla."
+                            return@Button
+                        }
+
                         scope.launch {
-                            repository.saveDiaryNote(
-                                title = title,
-                                body = content
-                            )
-                            onNoteSaved()
+                            isSaving = true
+                            runCatching {
+                                repository.saveDiaryNote(
+                                    title = title,
+                                    body = content
+                                )
+                            }.onSuccess {
+                                onNoteSaved()
+                            }.onFailure { throwable ->
+                                errorMessage = throwable.toUserMessage("No se pudo guardar la nota")
+                            }
+                            isSaving = false
                         }
                     },
                     modifier = Modifier
@@ -161,10 +174,19 @@ fun NewDiaryNoteScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Guardar nota",
+                        text = if (isSaving) "Guardando..." else "Guardar nota",
                         style = MaterialTheme.typography.titleMedium,
                         color = PrimaryLight,
                         fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                errorMessage?.let { message ->
+                    Text(
+                        text = message,
+                        modifier = Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
 
