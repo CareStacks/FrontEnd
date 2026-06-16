@@ -1,499 +1,522 @@
 package pe.edu.upc.careconnect.presentation.agenda
 
-import androidx.annotation.DrawableRes
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import pe.edu.upc.careconnect.R
+import kotlinx.coroutines.launch
+import pe.edu.upc.careconnect.data.remote.HealthEventDto
+import pe.edu.upc.careconnect.data.remote.toUserMessage
+import pe.edu.upc.careconnect.data.repository.AgendaRepository
+import pe.edu.upc.careconnect.presentation.components.CareScreenHeader
 import pe.edu.upc.careconnect.presentation.theme.Background
 import pe.edu.upc.careconnect.presentation.theme.Border
-import pe.edu.upc.careconnect.presentation.theme.Neutral
 import pe.edu.upc.careconnect.presentation.theme.Primary
-import pe.edu.upc.careconnect.presentation.theme.Secondary
+import pe.edu.upc.careconnect.presentation.theme.PrimaryLight
 import pe.edu.upc.careconnect.presentation.theme.Surface
-import pe.edu.upc.careconnect.presentation.theme.Tertiary
 import pe.edu.upc.careconnect.presentation.theme.TextPrimary
 import pe.edu.upc.careconnect.presentation.theme.TextSecondary
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 fun EventDetailScreen(
+    eventId: String,
     modifier: Modifier = Modifier,
     onBackClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
-    onConfirmClick: () -> Unit = {},
-    onRescheduleClick: () -> Unit = {}
+    onEventUpdated: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val repository = remember(context) { AgendaRepository.getInstance(context) }
+    val scope = rememberCoroutineScope()
+    var event by remember(eventId) { mutableStateOf<HealthEventDto?>(null) }
+    var errorMessage by remember(eventId) { mutableStateOf<String?>(null) }
+    var isLoading by remember(eventId) { mutableStateOf(true) }
+    var isSubmitting by remember { mutableStateOf(false) }
+    var showRescheduleDialog by remember { mutableStateOf(false) }
+
+    fun loadEvent() {
+        scope.launch {
+            isLoading = true
+            errorMessage = null
+            runCatching {
+                repository.getAgendaEventById(eventId)
+            }.onSuccess { loadedEvent ->
+                event = loadedEvent
+            }.onFailure { throwable ->
+                errorMessage = throwable.toUserMessage("No se pudo cargar el detalle del evento")
+            }
+            isLoading = false
+        }
+    }
+
+    LaunchedEffect(eventId) {
+        loadEvent()
+    }
+
+    if (showRescheduleDialog && event != null) {
+        RescheduleEventDialog(
+            event = event!!,
+            onDismiss = { showRescheduleDialog = false },
+            onConfirm = { startAt, endAt ->
+                scope.launch {
+                    isSubmitting = true
+                    runCatching {
+                        repository.rescheduleAgendaEvent(eventId, startAt, endAt)
+                    }.onSuccess { updatedEvent ->
+                        event = updatedEvent
+                        errorMessage = null
+                        showRescheduleDialog = false
+                        onEventUpdated()
+                    }.onFailure { throwable ->
+                        errorMessage = throwable.toUserMessage("No se pudo reprogramar el evento")
+                    }
+                    isSubmitting = false
+                }
+            }
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(Background)
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(horizontal = 24.dp)
-            .padding(bottom = 16.dp)
     ) {
-        EventDetailHeader(
-            onBackClick = onBackClick,
-            onNotificationsClick = onNotificationsClick
+        CareScreenHeader(
+            title = "Detalle del evento",
+            navigationIcon = pe.edu.upc.careconnect.R.drawable.ic_arrow_back,
+            navigationContentDescription = "Volver",
+            onNavigationClick = onBackClick,
+            actionIcon = pe.edu.upc.careconnect.R.drawable.ic_notifications,
+            actionContentDescription = "Notificaciones",
+            onActionClick = onNotificationsClick
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        when {
+            isLoading -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    CircularProgressIndicator(color = Primary)
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Cargando detalle del evento...",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextSecondary
+                    )
+                }
+            }
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            contentPadding = PaddingValues(bottom = 20.dp)
-        ) {
-            item {
-                EventHeroCard()
+            event == null -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = errorMessage ?: "No se encontró el evento solicitado.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedButton(onClick = ::loadEvent) {
+                        Text("Reintentar")
+                    }
+                }
+            }
 
-                Spacer(modifier = Modifier.height(24.dp))
+            else -> {
+                val currentEvent = event!!
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item {
+                        EventSummaryCard(currentEvent)
+                    }
 
-                DetailInfoCard(
-                    icon = R.drawable.ic_calendar,
-                    iconBackground = Primary.copy(alpha = 0.18f),
-                    iconTint = Primary,
-                    label = "FECHA Y HORA",
-                    title = "24 Oct, 2023",
-                    description = "10:30 AM - 11:30 AM"
-                )
+                    errorMessage?.let { message ->
+                        item {
+                            Text(
+                                text = message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    item {
+                        EventInfoCard(
+                            label = "Fecha",
+                            value = AgendaRepository.formatEventDate(currentEvent.startAt)
+                        )
+                    }
 
-                StatusInfoCard()
+                    item {
+                        EventInfoCard(
+                            label = "Horario",
+                            value = AgendaRepository.formatEventTimeRange(currentEvent.startAt, currentEvent.endAt)
+                        )
+                    }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    item {
+                        EventInfoCard(
+                            label = "Estado",
+                            value = currentEvent.status.toAgendaStatusLabel()
+                        )
+                    }
 
-                DetailInfoCard(
-                    icon = R.drawable.ic_location,
-                    iconBackground = Secondary.copy(alpha = 0.85f),
-                    iconTint = Color(0xFF4E6F61),
-                    label = "UBICACIÓN",
-                    title = "Centro Médico Salud\nIntegral",
-                    description = "Av. Principal 123, Piso 4 -\nConsultorio 402"
-                )
+                    item {
+                        EventInfoCard(
+                            label = "Recordatorio",
+                            value = currentEvent.reminderAt?.let {
+                                AgendaRepository.formatEventDate(it) + " · " + AgendaRepository.formatEventTimeRange(it, null)
+                            } ?: "El backend no devolvió recordatorio para este evento."
+                        )
+                    }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    item {
+                        EventInfoCard(
+                            label = "Descripción",
+                            value = currentEvent.description.orEmpty().ifBlank {
+                                "El backend no devolvió una descripción para este evento."
+                            }
+                        )
+                    }
 
-                DescriptionCard()
+                    item {
+                        EventActions(
+                            event = currentEvent,
+                            isSubmitting = isSubmitting,
+                            onConfirmClick = {
+                                scope.launch {
+                                    isSubmitting = true
+                                    runCatching {
+                                        repository.confirmAgendaEvent(eventId)
+                                    }.onSuccess { updatedEvent ->
+                                        event = updatedEvent
+                                        errorMessage = null
+                                        onEventUpdated()
+                                    }.onFailure { throwable ->
+                                        errorMessage = throwable.toUserMessage("No se pudo confirmar el evento")
+                                    }
+                                    isSubmitting = false
+                                }
+                            },
+                            onRescheduleClick = {
+                                showRescheduleDialog = true
+                            },
+                            onCancelClick = {
+                                scope.launch {
+                                    isSubmitting = true
+                                    runCatching {
+                                        repository.cancelAgendaEvent(eventId)
+                                    }.onSuccess { updatedEvent ->
+                                        event = updatedEvent
+                                        errorMessage = null
+                                        onEventUpdated()
+                                    }.onFailure { throwable ->
+                                        errorMessage = throwable.toUserMessage("No se pudo cancelar el evento")
+                                    }
+                                    isSubmitting = false
+                                }
+                            }
+                        )
+                    }
+                }
             }
         }
+    }
+}
 
-        Button(
-            onClick = onConfirmClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(10.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Primary,
-                contentColor = Surface
-            ),
-            contentPadding = PaddingValues(horizontal = 16.dp)
+@Composable
+private fun EventSummaryCard(event: HealthEventDto) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_check_circle),
-                contentDescription = "Confirmar evento",
-                tint = Surface,
-                modifier = Modifier.size(22.dp)
-            )
-
-            Spacer(modifier = Modifier.width(10.dp))
-
             Text(
-                text = "Confirmar evento",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
+                text = event.type.toDisplayType(),
+                style = MaterialTheme.typography.labelLarge,
+                color = Primary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = event.title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = when {
+                    event.caregiverId.isNullOrBlank() -> "Evento creado sin caregiver asociado."
+                    else -> "Evento asociado a un caregiver en backend."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary
             )
         }
+    }
+}
 
-        Spacer(modifier = Modifier.height(16.dp))
+@Composable
+private fun EventInfoCard(
+    label: String,
+    value: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = label.uppercase(Locale.getDefault()),
+                style = MaterialTheme.typography.labelMedium,
+                color = TextSecondary,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextPrimary
+            )
+        }
+    }
+}
+
+@Composable
+private fun EventActions(
+    event: HealthEventDto,
+    isSubmitting: Boolean,
+    onConfirmClick: () -> Unit,
+    onRescheduleClick: () -> Unit,
+    onCancelClick: () -> Unit
+) {
+    val canConfirm = event.status == "PENDING"
+    val canModifySchedule = event.status != "CANCELLED" && event.status != "MISSED"
+    val canCancel = event.status != "CANCELLED"
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (canConfirm) {
+            Button(
+                onClick = onConfirmClick,
+                enabled = !isSubmitting,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Primary,
+                    contentColor = PrimaryLight
+                )
+            ) {
+                Text(if (isSubmitting) "Procesando..." else "Confirmar evento")
+            }
+        }
 
         OutlinedButton(
             onClick = onRescheduleClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            shape = RoundedCornerShape(10.dp),
-            border = BorderStroke(1.5.dp, Color(0xFF4E6F61)),
+            enabled = canModifySchedule && !isSubmitting,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, Primary)
+        ) {
+            Text("Reprogramar")
+        }
+
+        OutlinedButton(
+            onClick = onCancelClick,
+            enabled = canCancel && !isSubmitting,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = Color(0xFF4E6F61)
-            ),
-            contentPadding = PaddingValues(horizontal = 16.dp)
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_reschedule),
-                contentDescription = "Reprogramar",
-                tint = Color(0xFF4E6F61),
-                modifier = Modifier.size(24.dp)
+                contentColor = MaterialTheme.colorScheme.error
             )
+        ) {
+            Text("Cancelar evento")
+        }
 
-            Spacer(modifier = Modifier.width(10.dp))
-
+        if (!canModifySchedule) {
             Text(
-                text = "Reprogramar",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
+                text = "El backend no permite reprogramar eventos cancelados o marcados como incumplidos.",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary
             )
         }
     }
 }
 
 @Composable
-private fun EventDetailHeader(
-    onBackClick: () -> Unit,
-    onNotificationsClick: () -> Unit
+private fun RescheduleEventDialog(
+    event: HealthEventDto,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalDateTime, LocalDateTime) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(
-            onClick = onBackClick,
-            modifier = Modifier.size(40.dp)
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_arrow_back),
-                contentDescription = "Volver",
-                tint = Neutral,
-                modifier = Modifier.size(26.dp)
-            )
-        }
+    var date by remember(event.id) { mutableStateOf(event.startAt.toEditableDate()) }
+    var time by remember(event.id) { mutableStateOf(event.startAt.toEditableTime()) }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
-        Spacer(modifier = Modifier.width(8.dp))
-
-        Text(
-            text = "Detalle del evento",
-            color = Primary,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.weight(1f)
-        )
-
-        IconButton(
-            onClick = onNotificationsClick,
-            modifier = Modifier.size(40.dp)
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_notifications),
-                contentDescription = "Notificaciones",
-                tint = Primary,
-                modifier = Modifier.size(24.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun EventHeroCard() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(192.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Neutral)
-    ) {
-        Image(
-            painter = painterResource(id = R.drawable.img_event_detail),
-            contentDescription = "Consulta médica",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.55f),
-                            Color.Black.copy(alpha = 0.15f)
-                        )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Reprogramar evento") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "Usá fecha `mm/dd/yyyy` y hora `hh:mm AM/PM`. El backend solo permite actualizar horario, no ubicación ni profesional porque esos campos no existen.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary
+                )
+                OutlinedTextField(
+                    value = date,
+                    onValueChange = {
+                        date = it
+                        validationError = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Fecha") },
+                    placeholder = { Text("mm/dd/yyyy") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Primary,
+                        unfocusedBorderColor = Border
                     )
                 )
-        )
-
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(24.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0xFFFFD7B5))
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = "CITA MÉDICA",
-                    color = Neutral,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
+                OutlinedTextField(
+                    value = time,
+                    onValueChange = {
+                        time = it
+                        validationError = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Hora") },
+                    placeholder = { Text("hh:mm AM/PM") },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Primary,
+                        unfocusedBorderColor = Border
+                    )
                 )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = "Consulta con Dr.\nMartínez",
-                color = Surface,
-                fontSize = 29.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 38.sp
-            )
-        }
-    }
-}
-
-@Composable
-private fun DetailInfoCard(
-    @DrawableRes icon: Int,
-    iconBackground: Color,
-    iconTint: Color,
-    label: String,
-    title: String,
-    description: String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Surface),
-        border = BorderStroke(1.dp, Border),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(iconBackground),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(id = icon),
-                    contentDescription = label,
-                    tint = iconTint,
-                    modifier = Modifier.size(25.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = label,
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.6.sp
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = title,
-                    color = TextPrimary,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = 26.sp
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = description,
-                    color = TextSecondary,
-                    fontSize = 16.sp,
-                    lineHeight = 23.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatusInfoCard() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Surface),
-        border = BorderStroke(1.dp, Border),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Tertiary.copy(alpha = 0.35f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_calendar),
-                    contentDescription = "Estado",
-                    tint = Color(0xFFB36A18),
-                    modifier = Modifier.size(25.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                Text(
-                    text = "ESTADO",
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.6.sp
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                validationError?.let {
                     Text(
-                        text = "Pendiente",
-                        color = TextPrimary,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .size(11.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFB36A18))
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "Esperando confirmación",
-                    color = TextSecondary,
-                    fontSize = 16.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DescriptionCard() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Surface),
-        border = BorderStroke(1.dp, Border),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp)
-        ) {
-            Text(
-                text = "DESCRIPCIÓN",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.6.sp
-            )
-
-            Spacer(modifier = Modifier.height(18.dp))
-
-            Text(
-                text = "Revisión trimestral de rutina para control de presión arterial y ajuste de medicación. El paciente debe asistir en ayunas y traer los resultados de los análisis de sangre realizados la semana pasada.",
-                color = TextPrimary,
-                fontSize = 16.sp,
-                lineHeight = 26.sp
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Primary.copy(alpha = 0.10f))
-                    .border(
-                        width = 0.dp,
-                        color = Color.Transparent,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(4.dp)
-                            .height(104.dp)
-                            .background(Primary)
-                    )
-
-                    Text(
-                        text = "Nota: Favor de llegar 15 minutos\nantes para el registro en\nrecepción.",
-                        color = TextSecondary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 25.sp,
-                        modifier = Modifier.padding(16.dp)
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
                     )
                 }
             }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val startAt = parseEventDateTime(date, time)
+                    if (startAt == null) {
+                        validationError = "Ingresá una fecha y hora válidas."
+                    } else {
+                        onConfirm(startAt, startAt.plusHours(1))
+                    }
+                }
+            ) {
+                Text("Guardar")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Cerrar")
+            }
         }
+    )
+}
+
+private fun String.toAgendaStatusLabel(): String {
+    return when (this) {
+        "CONFIRMED" -> "Confirmado"
+        "PENDING" -> "Pendiente"
+        "MISSED" -> "Incumplido"
+        "CANCELLED" -> "Cancelado"
+        else -> this
+    }
+}
+
+private fun String.toDisplayType(): String {
+    return when (this) {
+        "APPOINTMENT" -> "Cita médica"
+        "MEDICATION" -> "Medicación"
+        "THERAPY" -> "Terapia"
+        "CARE_ACTIVITY" -> "Actividad de cuidado"
+        else -> this
+    }
+}
+
+private fun String?.toEditableDate(): String {
+    if (this.isNullOrBlank()) return ""
+    return runCatching {
+        LocalDateTime.parse(this).format(DateTimeFormatter.ofPattern("MM/dd/yyyy", Locale.US))
+    }.getOrDefault("")
+}
+
+private fun String?.toEditableTime(): String {
+    if (this.isNullOrBlank()) return ""
+    return runCatching {
+        LocalDateTime.parse(this).format(DateTimeFormatter.ofPattern("hh:mm a", Locale.US))
+    }.getOrDefault("")
+}
+
+private fun parseEventDateTime(date: String, time: String): LocalDateTime? {
+    val value = "${date.trim()} ${time.trim()}"
+    val formatters = listOf(
+        DateTimeFormatter.ofPattern("MM/dd/yyyy hh:mm a", Locale.US),
+        DateTimeFormatter.ofPattern("M/d/yyyy hh:mm a", Locale.US)
+    )
+
+    return formatters.firstNotNullOfOrNull { formatter ->
+        runCatching { LocalDateTime.parse(value, formatter) }.getOrNull()
     }
 }

@@ -1,5 +1,8 @@
 package pe.edu.upc.careconnect.presentation.agenda
 
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -35,18 +38,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import pe.edu.upc.careconnect.R
+import pe.edu.upc.careconnect.data.remote.toUserMessage
+import pe.edu.upc.careconnect.data.repository.AgendaRepository
 import pe.edu.upc.careconnect.presentation.theme.Background
 import pe.edu.upc.careconnect.presentation.theme.Border
 import pe.edu.upc.careconnect.presentation.theme.Neutral
@@ -63,12 +71,17 @@ fun RegisterEventScreen(
     onBackClick: () -> Unit = {},
     onSaveClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val agendaRepository = remember(context) { AgendaRepository.getInstance(context) }
+    val scope = rememberCoroutineScope()
     var eventType by remember { mutableStateOf("Medicación") }
     var eventName by remember { mutableStateOf("") }
     var eventDate by remember { mutableStateOf("") }
     var eventTime by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var reminderEnabled by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isSaving by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -194,7 +207,36 @@ fun RegisterEventScreen(
         Spacer(modifier = Modifier.height(56.dp))
 
         Button(
-            onClick = onSaveClick,
+            onClick = {
+                errorMessage = null
+                val startAt = parseEventDateTime(eventDate, eventTime)
+                if (eventName.isBlank()) {
+                    errorMessage = "Ingresá el nombre del evento."
+                    return@Button
+                }
+                if (startAt == null) {
+                    errorMessage = "Usá fecha `mm/dd/yyyy` y hora `hh:mm AM/PM`."
+                    return@Button
+                }
+
+                scope.launch {
+                    isSaving = true
+                    runCatching {
+                        agendaRepository.createAgendaEvent(
+                            title = eventName.trim(),
+                            description = description.trim(),
+                            type = eventType.toBackendEventType(),
+                            startAt = startAt,
+                            endAt = startAt.plusHours(1)
+                        )
+                    }.onSuccess {
+                        onSaveClick()
+                    }.onFailure { throwable ->
+                        errorMessage = throwable.toUserMessage("No se pudo guardar el evento")
+                    }
+                    isSaving = false
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
@@ -215,9 +257,18 @@ fun RegisterEventScreen(
             Spacer(modifier = Modifier.width(10.dp))
 
             Text(
-                text = "Guardar evento",
+                text = if (isSaving) "Guardando..." else "Guardar evento",
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold
+            )
+        }
+
+        errorMessage?.let { message ->
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = message,
+                color = Color(0xFFB91C1C),
+                fontSize = 14.sp
             )
         }
 
@@ -229,6 +280,27 @@ fun RegisterEventScreen(
             fontSize = 14.sp,
             modifier = Modifier.align(Alignment.CenterHorizontally)
         )
+    }
+}
+
+private fun String.toBackendEventType(): String {
+    return when (this.lowercase(Locale.getDefault())) {
+        "medicación" -> "MEDICATION"
+        "cita médica" -> "APPOINTMENT"
+        "terapia" -> "THERAPY"
+        else -> "CARE_ACTIVITY"
+    }
+}
+
+private fun parseEventDateTime(date: String, time: String): LocalDateTime? {
+    val value = "${date.trim()} ${time.trim()}"
+    val formatters = listOf(
+        DateTimeFormatter.ofPattern("MM/dd/yyyy hh:mm a", Locale.US),
+        DateTimeFormatter.ofPattern("M/d/yyyy hh:mm a", Locale.US)
+    )
+
+    return formatters.firstNotNullOfOrNull { formatter ->
+        runCatching { LocalDateTime.parse(value, formatter) }.getOrNull()
     }
 }
 

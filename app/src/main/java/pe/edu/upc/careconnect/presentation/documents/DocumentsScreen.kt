@@ -70,9 +70,10 @@ fun DocumentsScreen(
     val repository = remember(context) { CareCacheRepository.getInstance(context) }
     val documents by repository.documents.collectAsState(initial = emptyList())
     var query by remember { mutableStateOf("") }
+    var syncError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(repository) {
-        repository.seedIfEmpty()
+        syncError = repository.safeSyncDocuments().exceptionOrNull()?.message
     }
 
     val filteredDocuments = remember(documents, query) {
@@ -105,6 +106,13 @@ fun DocumentsScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             DocumentsTitle()
+            syncError?.let { message ->
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
             DocumentSearchField(
                 value = query,
                 onValueChange = { query = it }

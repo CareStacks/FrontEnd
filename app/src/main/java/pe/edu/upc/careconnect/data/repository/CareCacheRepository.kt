@@ -1,63 +1,110 @@
 package pe.edu.upc.careconnect.data.repository
 
 import android.content.Context
+import android.net.Uri
+import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import pe.edu.upc.careconnect.data.local.CachedDiaryNoteEntity
 import pe.edu.upc.careconnect.data.local.CachedDocumentEntity
 import pe.edu.upc.careconnect.data.local.CachedNotificationEntity
 import pe.edu.upc.careconnect.data.local.CareCacheDatabase
+import pe.edu.upc.careconnect.data.remote.ApiClient
+import pe.edu.upc.careconnect.data.remote.UploadDocumentItemRequestDto
+import pe.edu.upc.careconnect.data.remote.toUserMessage
+import pe.edu.upc.careconnect.data.session.SessionManager
 
 class CareCacheRepository private constructor(
+    private val context: Context,
     private val database: CareCacheDatabase
 ) {
     private val dao = database.careCacheDao()
+    private val api = ApiClient.service
+    private val sessionManager = SessionManager.getInstance(context)
 
     val documents = dao.observeDocuments()
     val diaryNotes = dao.observeDiaryNotes()
     val notifications = dao.observeNotifications()
 
-    suspend fun seedIfEmpty() {
-        if (dao.countDocuments() == 0) {
-            dao.upsertDocuments(FakeCareCacheData.documents)
-        }
+    suspend fun syncDocuments() {
+        val patientId = sessionManager.requireActivePatientId()
+        val remoteDocuments = api.getDocumentsByPatient(patientId)
+        val cachedDocuments = remoteDocuments
+            .flatMap { medicalDocument ->
+                if (sessionManager.medicalDocumentId == null) {
+                    sessionManager.saveMedicalDocumentId(medicalDocument.id)
+                }
 
-        if (dao.countDiaryNotes() == 0) {
-            dao.upsertDiaryNotes(FakeCareCacheData.diaryNotes)
-        }
+                medicalDocument.documentItems.mapIndexed { index, item ->
+                    CachedDocumentEntity(
+                        id = item.id.toString(),
+                        title = item.title,
+                        type = item.documentType.toDisplayDocumentType(),
+                        date = item.uploadedAt.toReadableDate(),
+                        section = if (index < 3) "RECIENTES" else "HISTORIAL ANUAL",
+                        tone = item.documentType.toDocumentTone(),
+                        description = item.description.orEmpty(),
+                        sortOrder = -(item.id)
+                    )
+                }
+            }
 
-        if (dao.countNotifications() == 0) {
-            dao.upsertNotifications(FakeCareCacheData.notifications)
+        dao.clearDocuments()
+        if (cachedDocuments.isNotEmpty()) {
+            dao.upsertDocuments(cachedDocuments)
         }
     }
 
-    suspend fun saveDocument(
-        type: String,
-        description: String,
-        date: String
-    ) {
-        val timestamp = System.currentTimeMillis()
-        dao.upsertDocument(
-            CachedDocumentEntity(
-                id = "doc-$timestamp",
-                title = description.ifBlank { "Documento médico" },
-                type = type.ifBlank { "PDF" },
-                date = date.ifBlank { "Hoy" },
-                section = "RECIENTES",
-                tone = when (type) {
-                    "Digital" -> "green"
-                    "Imagen" -> "orange"
-                    else -> "purple"
-                },
-                description = description,
-                sortOrder = -timestamp
+    suspend fun syncDiaryNotes() {
+        val patientId = sessionManager.requireActivePatientId()
+        val remoteNotes = api.getDiaryEntriesByPatient(patientId)
+        val cachedNotes = remoteNotes.mapIndexed { index, note ->
+            CachedDiaryNoteEntity(
+                id = note.id.toString(),
+                author = sessionManager.userFullName ?: "CareConnect",
+                timestamp = note.entryDate.toReadableDateTime(),
+                body = note.content,
+                tags = if (index == 0) "Nueva nota" else "",
+                tone = if (index == 0) "green" else "neutral",
+                isHighlighted = index == 0,
+                sortOrder = -note.id
             )
-        )
+        }
+
+        dao.clearDiaryNotes()
+        if (cachedNotes.isNotEmpty()) {
+            dao.upsertDiaryNotes(cachedNotes)
+        }
+    }
+
+    suspend fun syncNotifications() {
+        val recipientId = sessionManager.requireCurrentUserId()
+        val remoteNotifications = api.getNotificationsByRecipient(recipientId)
+        val cachedNotifications = remoteNotifications.map { notification ->
+            CachedNotificationEntity(
+                id = notification.id,
+                title = notification.title,
+                message = notification.message,
+                status = notification.status.toDisplayStatus(),
+                statusTone = notification.status.toStatusTone(),
+                actionLabel = notification.type.toActionLabel(),
+                timestamp = (notification.readAt ?: notification.sentAt ?: notification.createdAt).toReadableDateTime(),
+                iconTone = notification.priority.toIconTone(),
+                sortOrder = -((notification.createdAt ?: "0").hashCode().toLong())
+            )
+        }
+
+        dao.clearNotifications()
+        if (cachedNotifications.isNotEmpty()) {
+            dao.upsertNotifications(cachedNotifications)
+        }
     }
 
     suspend fun saveDiaryNote(
         title: String,
         body: String
     ) {
-        val timestamp = System.currentTimeMillis()
         val noteBody = buildString {
             if (title.isNotBlank()) {
                 append(title.trim())
@@ -66,18 +113,85 @@ class CareCacheRepository private constructor(
             append(body.ifBlank { "Nota registrada sin contenido adicional." })
         }
 
-        dao.upsertDiaryNote(
-            CachedDiaryNoteEntity(
-                id = "note-$timestamp",
-                author = "Elena Rodriguez",
-                timestamp = "HOY",
-                body = noteBody,
-                tags = "Nueva nota",
-                tone = "green",
-                isHighlighted = true,
-                sortOrder = -timestamp
+        api.createDiaryEntry(
+            pe.edu.upc.careconnect.data.remote.CreateDiaryEntryRequestDto(
+                patientId = sessionManager.requireActivePatientId(),
+                content = noteBody
             )
         )
+
+        syncDiaryNotes()
+    }
+
+    suspend fun saveDocument(
+        documentType: String,
+        title: String,
+        description: String,
+        fileUri: Uri,
+        mimeType: String,
+        fileSizeBytes: Long,
+        uploadedAt: LocalDateTime?
+    ) {
+        val medicalDocumentId = ensureMedicalDocumentId()
+        api.uploadDocumentItem(
+            medicalDocumentId = medicalDocumentId,
+            request = UploadDocumentItemRequestDto(
+                documentType = documentType,
+                title = title,
+                description = description,
+                fileUrl = fileUri.toString(),
+                mimeType = mimeType,
+                fileSizeBytes = fileSizeBytes,
+                uploadedAt = (uploadedAt ?: LocalDateTime.now()).format(API_DATE_TIME_FORMATTER)
+            )
+        )
+
+        syncDocuments()
+    }
+
+    suspend fun syncAllCaches() {
+        syncDocuments()
+        syncDiaryNotes()
+        syncNotifications()
+    }
+
+    suspend fun safeSyncDocuments(): Result<Unit> = runCatching {
+        syncDocuments()
+    }.mapError("No se pudieron sincronizar los documentos")
+
+    suspend fun safeSyncDiaryNotes(): Result<Unit> = runCatching {
+        syncDiaryNotes()
+    }.mapError("No se pudo sincronizar el diario")
+
+    suspend fun safeSyncNotifications(): Result<Unit> = runCatching {
+        syncNotifications()
+    }.mapError("No se pudieron sincronizar las notificaciones")
+
+    private suspend fun ensureMedicalDocumentId(): Long {
+        sessionManager.medicalDocumentId?.let { return it }
+
+        val patientId = sessionManager.requireActivePatientId()
+        val existingDocuments = api.getDocumentsByPatient(patientId)
+        val existingId = existingDocuments.firstOrNull()?.id
+        if (existingId != null) {
+            sessionManager.saveMedicalDocumentId(existingId)
+            return existingId
+        }
+
+        val createdDocument = api.createMedicalDocument(
+            pe.edu.upc.careconnect.data.remote.CreateMedicalDocumentRequestDto(
+                patientId = patientId
+            )
+        )
+
+        sessionManager.saveMedicalDocumentId(createdDocument.id)
+        return createdDocument.id
+    }
+
+    private fun <T> Result<T>.mapError(defaultMessage: String): Result<T> {
+        return exceptionOrNull()?.let { throwable ->
+            Result.failure(IllegalStateException(throwable.toUserMessage(defaultMessage), throwable))
+        } ?: this
     }
 
     companion object {
@@ -87,11 +201,98 @@ class CareCacheRepository private constructor(
         fun getInstance(context: Context): CareCacheRepository {
             return instance ?: synchronized(this) {
                 instance ?: CareCacheRepository(
-                    CareCacheDatabase.getInstance(context)
+                    context = context.applicationContext,
+                    database = CareCacheDatabase.getInstance(context)
                 ).also { repository ->
                     instance = repository
                 }
             }
         }
+    }
+}
+
+private val API_DATE_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+
+private fun String?.toReadableDate(): String {
+    if (this.isNullOrBlank()) {
+        return "Sin fecha"
+    }
+
+    return runCatching {
+        OffsetDateTime.parse(this).format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault()))
+    }.recoverCatching {
+        LocalDateTime.parse(this, API_DATE_TIME_FORMATTER)
+            .format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault()))
+    }.getOrDefault(this)
+}
+
+private fun String?.toReadableDateTime(): String {
+    if (this.isNullOrBlank()) {
+        return "Sin fecha"
+    }
+
+    return runCatching {
+        OffsetDateTime.parse(this).format(DateTimeFormatter.ofPattern("dd MMM, hh:mm a", Locale.getDefault()))
+    }.recoverCatching {
+        LocalDateTime.parse(this, API_DATE_TIME_FORMATTER)
+            .format(DateTimeFormatter.ofPattern("dd MMM, hh:mm a", Locale.getDefault()))
+    }.getOrDefault(this)
+}
+
+private fun String.toDisplayDocumentType(): String {
+    return when (this) {
+        "PRESCRIPTION" -> "Receta"
+        "LAB_RESULT" -> "Laboratorio"
+        "CLINICAL_REPORT" -> "Informe"
+        "IMAGING" -> "Imagen"
+        "REFERRAL" -> "Referencia"
+        "VACCINATION_RECORD" -> "Vacuna"
+        "INSURANCE_FORM" -> "Seguro"
+        else -> "Otro"
+    }
+}
+
+private fun String.toDocumentTone(): String {
+    return when (this) {
+        "IMAGING" -> "orange"
+        "PRESCRIPTION", "VACCINATION_RECORD" -> "green"
+        else -> "purple"
+    }
+}
+
+private fun String.toDisplayStatus(): String {
+    return when (this) {
+        "READ" -> "Leído"
+        "SCHEDULED" -> "Pendiente"
+        "SENT", "DELIVERED" -> "Enviado"
+        "FAILED" -> "Fallido"
+        "CANCELLED" -> "Cancelado"
+        else -> this
+    }
+}
+
+private fun String.toStatusTone(): String {
+    return when (this) {
+        "READ" -> "read"
+        "FAILED", "CANCELLED" -> "error"
+        "SCHEDULED" -> "warning"
+        else -> "neutral"
+    }
+}
+
+private fun String.toActionLabel(): String {
+    return when (this) {
+        "ALERT" -> "Resolver"
+        "REMINDER" -> "Ver detalles"
+        else -> "Abrir"
+    }
+}
+
+private fun String.toIconTone(): String {
+    return when (this) {
+        "CRITICAL" -> "error"
+        "HIGH" -> "purple"
+        "MEDIUM" -> "green"
+        else -> "primary"
     }
 }
