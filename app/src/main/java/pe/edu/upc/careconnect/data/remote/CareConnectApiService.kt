@@ -69,4 +69,10 @@ interface CareConnectApiService {
 
     @DELETE("api/agenda/{id}")
     suspend fun deleteAgendaEvent(@Path("id") eventId: String)
+
+    @POST("api/consents")
+    suspend fun grantConsent(
+        @Header("Authorization") authorization: String,
+        @Body request: GrantConsentRequestDto
+    ): ProfileShareConsentDto
 }

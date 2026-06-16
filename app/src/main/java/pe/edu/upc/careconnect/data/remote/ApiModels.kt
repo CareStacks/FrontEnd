@@ -127,3 +127,20 @@ data class HealthEventDto(
     val createdAt: String?,
     val updatedAt: String?
 )
+
+data class GrantConsentRequestDto(
+    val caregiverId: String? = null,
+    val caregiverEmail: String? = null,
+    val allowedViews: List<String>
+)
+
+data class ProfileShareConsentDto(
+    val id: String,
+    val patientId: String,
+    val patientFullName: String?,
+    val caregiverId: String,
+    val caregiverFullName: String?,
+    val allowedViews: List<String>,
+    val createdAt: String?,
+    val updatedAt: String?
+)
