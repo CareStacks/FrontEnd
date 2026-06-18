@@ -120,11 +120,7 @@ fun AgendaScreen(
                 }
 
                 if (events.isEmpty()) {
-                    Text(
-                        text = "No hay eventos cargados todavía.",
-                        color = TextSecondary,
-                        fontSize = 16.sp
-                    )
+                    EmptyAgendaState()
                 } else {
                     events.forEachIndexed { index, event ->
                         val statusColors = agendaStatusColors(event.status)
@@ -435,6 +431,58 @@ private fun EventsHeader() {
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold
         )
+    }
+}
+
+@Composable
+private fun EmptyAgendaState() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        border = BorderStroke(1.dp, Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Secondary.copy(alpha = 0.85f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_calendar),
+                    contentDescription = "Agenda vacía",
+                    tint = Color(0xFF4E6F61),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Aún no tienes eventos creados.",
+                color = TextPrimary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Crea tu primer recordatorio para comenzar.",
+                color = TextSecondary,
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
+                textAlign = TextAlign.Center
+            )
+
+        }
     }
 }
 

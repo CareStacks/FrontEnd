@@ -79,6 +79,7 @@ fun Main(
                             selected = selected,
                             onClick = {
                                 selectedTab.value = tab
+                                overlay.value = null
                             },
                             icon = {
                                 AppIcon(

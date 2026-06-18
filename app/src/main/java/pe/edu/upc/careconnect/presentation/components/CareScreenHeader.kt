@@ -23,7 +23,7 @@ import pe.edu.upc.careconnect.presentation.theme.Primary
 fun CareScreenHeader(
     title: String,
     modifier: Modifier = Modifier,
-    @DrawableRes navigationIcon: Int? = R.drawable.ic_menu,
+    @DrawableRes navigationIcon: Int? = null,
     navigationContentDescription: String = "Abrir menú",
     onNavigationClick: (() -> Unit)? = null,
     @DrawableRes actionIcon: Int? = R.drawable.ic_notification,

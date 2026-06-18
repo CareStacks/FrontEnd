@@ -123,13 +123,13 @@ private fun DiaryTitleSection(onNewNoteClick: () -> Unit) {
             Text(
                 text = "Diario",
                 style = MaterialTheme.typography.headlineLarge,
-                color = TextPrimary,
+                color = Primary,
                 fontWeight = FontWeight.Bold
             )
             Text(
                 text = "Registro del bienestar\ndiario",
                 style = MaterialTheme.typography.bodyLarge,
-                color = TextSecondary
+                color = Primary
             )
         }
 

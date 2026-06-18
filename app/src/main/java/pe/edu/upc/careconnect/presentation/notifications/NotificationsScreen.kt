@@ -80,8 +80,7 @@ fun NotificationsScreen(
             navigationIcon = R.drawable.ic_arrow_back,
             navigationContentDescription = "Volver",
             onNavigationClick = onBackClick,
-            actionIcon = R.drawable.ic_notification,
-            actionContentDescription = "Notificaciones"
+            actionIcon = null
         )
 
         Column(

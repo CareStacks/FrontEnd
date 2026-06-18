@@ -106,20 +106,6 @@ private fun HomeHeader(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(
-                onClick = {},
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_menu),
-                    contentDescription = "Menú",
-                    tint = Primary,
-                    modifier = Modifier.size(26.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
             Text(
                 text = "CareConnect",
                 color = Primary,
