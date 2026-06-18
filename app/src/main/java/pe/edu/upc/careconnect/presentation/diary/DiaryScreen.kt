@@ -6,19 +6,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -78,87 +75,79 @@ fun DiaryScreen(
             ?.toUserMessage("No se pudieron sincronizar las notas")
     }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(Background)
     ) {
-        CareScreenHeader(
-            title = "CareConnect",
-            onActionClick = onNotificationsClick
-        )
-
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
-                .padding(top = 24.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            modifier = Modifier.fillMaxSize()
         ) {
-            DiaryTitleSection(onNewNoteClick = onNewNoteClick)
+            CareScreenHeader(
+                title = "CareConnect",
+                onActionClick = onNotificationsClick
+            )
 
-            syncError?.let { message ->
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 24.dp, bottom = 88.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                DiaryTitleSection()
 
-            Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                notes.forEach { note ->
-                    DiaryNoteCard(note = note)
+                syncError?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                    notes.forEach { note ->
+                        DiaryNoteCard(note = note)
+                    }
                 }
             }
+        }
+
+        FloatingActionButton(
+            onClick = onNewNoteClick,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp)
+                .size(64.dp),
+            shape = CircleShape,
+            containerColor = Primary,
+            contentColor = PrimaryLight
+        ) {
+            AppIcon(
+                icon = R.drawable.ic_plus,
+                contentDescription = "Nueva nota",
+                tint = PrimaryLight,
+                size = 28.dp
+            )
         }
     }
 }
 
 @Composable
-private fun DiaryTitleSection(onNewNoteClick: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(
-                text = "Diario",
-                style = MaterialTheme.typography.headlineLarge,
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "Registro del bienestar\ndiario",
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextSecondary
-            )
-        }
-
-        Button(
-            onClick = onNewNoteClick,
-            modifier = Modifier.height(56.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Primary,
-                contentColor = PrimaryLight
-            )
-        ) {
-            AppIcon(
-                icon = R.drawable.ic_plus,
-                contentDescription = null,
-                tint = PrimaryLight,
-                size = 16.dp
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = "Nueva\nnota",
-                style = MaterialTheme.typography.titleMedium,
-                color = PrimaryLight,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
+private fun DiaryTitleSection() {
+    Column {
+        Text(
+            text = "Diario",
+            style = MaterialTheme.typography.headlineLarge,
+            color = TextPrimary,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "Registro del bienestar\ndiario",
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextSecondary
+        )
     }
 }
 
