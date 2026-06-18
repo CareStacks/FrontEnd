@@ -136,7 +136,7 @@ fun Main(
                     when (selectedTab.value) {
                         MainTab.Home -> {
                             HomeScreen(
-                                userName = authRepository.currentUserName()?.substringBefore(' ') ?: "Mariana",
+                                userName = authRepository.currentUserName()?.substringBefore(' ') ?: "Usuario",
                                 onRegisterEventClick = onRegisterEventClick,
                                 onUploadDocumentClick = {
                                     overlay.value = MainOverlay.UploadDocument

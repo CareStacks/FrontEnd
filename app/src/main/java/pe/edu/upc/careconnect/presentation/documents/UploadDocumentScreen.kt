@@ -241,7 +241,7 @@ fun UploadDocumentScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isSaving) "Subiendo..." else "Subir documento",
+                        text = if (isSaving) "Guardando..." else "Subir documento",
                         style = MaterialTheme.typography.bodyLarge,
                         color = Surface
                     )

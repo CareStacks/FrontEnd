@@ -1,1 +1,9 @@
 /build
+.env
+.env.local
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+secrets.properties

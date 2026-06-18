@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import pe.edu.upc.careconnect.R
 import pe.edu.upc.careconnect.data.local.CachedDocumentEntity
+import pe.edu.upc.careconnect.data.remote.toUserMessage
 import pe.edu.upc.careconnect.data.repository.CareCacheRepository
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 import pe.edu.upc.careconnect.presentation.components.CareScreenHeader
@@ -55,6 +56,8 @@ import pe.edu.upc.careconnect.presentation.theme.OrangeLight
 import pe.edu.upc.careconnect.presentation.theme.Primary
 import pe.edu.upc.careconnect.presentation.theme.PrimaryDark
 import pe.edu.upc.careconnect.presentation.theme.PrimaryLight
+import pe.edu.upc.careconnect.presentation.theme.RedDark
+import pe.edu.upc.careconnect.presentation.theme.RedLight
 import pe.edu.upc.careconnect.presentation.theme.Surface
 import pe.edu.upc.careconnect.presentation.theme.TextMuted
 import pe.edu.upc.careconnect.presentation.theme.TextPrimary
@@ -73,7 +76,10 @@ fun DocumentsScreen(
     var syncError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(repository) {
-        syncError = repository.safeSyncDocuments().exceptionOrNull()?.message
+        syncError = repository.safeSyncDocuments()
+            .exceptionOrNull()
+            ?.toUserMessage("No se pudieron sincronizar los documentos")
+        repository.retryPendingDocumentUploads()
     }
 
     val filteredDocuments = remember(documents, query) {
@@ -180,6 +186,11 @@ private fun DocumentSearchField(
 
 @Composable
 private fun DocumentList(documents: List<CachedDocumentEntity>) {
+    if (documents.isEmpty()) {
+        EmptyDocumentsState()
+        return
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         DocumentSection(
             title = "RECIENTES",
@@ -267,11 +278,22 @@ private fun DocumentCard(document: CachedDocumentEntity) {
                         background = tone.background,
                         content = tone.content
                     )
+                    DocumentSyncBadge(status = document.syncStatus)
                     Text(
                         text = document.date,
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                         maxLines = 1
+                    )
+                }
+
+                if (document.syncStatus == "ERROR" && !document.errorMessage.isNullOrBlank()) {
+                    Text(
+                        text = document.errorMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -281,6 +303,50 @@ private fun DocumentCard(document: CachedDocumentEntity) {
                 contentDescription = "Abrir ${document.title}",
                 tint = TextMuted,
                 size = 18.dp
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyDocumentsState() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, Border),
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .background(PrimaryLight, RoundedCornerShape(999.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                AppIcon(
+                    icon = R.drawable.ic_file,
+                    contentDescription = null,
+                    tint = Primary,
+                    size = 24.dp
+                )
+            }
+
+            Text(
+                text = "Aún no tienes documentos guardados.",
+                style = MaterialTheme.typography.titleMedium,
+                color = TextPrimary,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = "Sube tu primer documento médico para verlo aquí.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary
             )
         }
     }
@@ -304,6 +370,29 @@ private fun DocumentTypeBadge(
             fontWeight = FontWeight.Bold
         )
     }
+}
+
+@Composable
+private fun DocumentSyncBadge(status: String) {
+    val badge = when (status) {
+        "UPLOADING" -> DocumentTone(OrangeLight, OrangeDark)
+        "PENDING" -> DocumentTone(PrimaryLight, PrimaryDark)
+        "ERROR" -> DocumentTone(RedLight, RedDark)
+        else -> null
+    } ?: return
+
+    val label = when (status) {
+        "UPLOADING" -> "Subiendo"
+        "PENDING" -> "Pendiente"
+        "ERROR" -> "Error"
+        else -> status
+    }
+
+    DocumentTypeBadge(
+        text = label,
+        background = badge.background,
+        content = badge.content
+    )
 }
 
 @Composable

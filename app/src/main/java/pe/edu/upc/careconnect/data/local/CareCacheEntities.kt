@@ -8,11 +8,20 @@ data class CachedDocumentEntity(
     @PrimaryKey val id: String,
     val title: String,
     val type: String,
+    val backendDocumentType: String,
     val date: String,
     val section: String,
     val tone: String,
     val description: String,
-    val sortOrder: Long
+    val sortOrder: Long,
+    val localUri: String?,
+    val storageBucket: String,
+    val storagePath: String,
+    val mimeType: String,
+    val fileSizeBytes: Long,
+    val uploadedAt: String?,
+    val syncStatus: String,
+    val errorMessage: String?
 )
 
 @Entity(tableName = "cached_diary_notes")

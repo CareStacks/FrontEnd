@@ -285,8 +285,11 @@ fun RegisterScreen(
 
                 when {
                     fullName.value.isBlank() -> errorMessage = "Ingresá tu nombre completo."
+                    !fullName.value.isValidFullName() -> errorMessage = "Revisa el nombre completo ingresado."
                     email.value.isBlank() -> errorMessage = "Ingresá tu correo electrónico."
+                    !email.value.isValidEmailAddress() -> errorMessage = "Ingresa un correo electrónico válido."
                     password.value.length < 8 -> errorMessage = "La contraseña debe tener al menos 8 caracteres."
+                    !password.value.hasRequiredPasswordStrength() -> errorMessage = "La contraseña debe incluir al menos una mayúscula y un número."
                     !acceptedTerms.value -> errorMessage = "Tenés que aceptar los términos para continuar."
                     else -> {
                         scope.launch {

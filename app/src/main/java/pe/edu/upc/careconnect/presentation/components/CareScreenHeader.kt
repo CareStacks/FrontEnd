@@ -2,11 +2,15 @@ package pe.edu.upc.careconnect.presentation.components
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -30,40 +34,48 @@ fun CareScreenHeader(
     actionContentDescription: String = "Abrir notificaciones",
     onActionClick: (() -> Unit)? = null
 ) {
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .background(BackgroundSoft)
-            .height(56.dp)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        if (navigationIcon != null) {
-            IconButton(onClick = { onNavigationClick?.invoke() }) {
-                AppIcon(
-                    icon = navigationIcon,
-                    contentDescription = navigationContentDescription,
-                    tint = Primary
-                )
+        Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (navigationIcon != null) {
+                IconButton(onClick = { onNavigationClick?.invoke() }) {
+                    AppIcon(
+                        icon = navigationIcon,
+                        contentDescription = navigationContentDescription,
+                        tint = Primary
+                    )
+                }
             }
-        }
 
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            color = Primary,
-            fontWeight = FontWeight.Bold
-        )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                color = Primary,
+                fontWeight = FontWeight.Bold
+            )
 
-        Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(1f))
 
-        if (actionIcon != null) {
-            IconButton(onClick = { onActionClick?.invoke() }) {
-                AppIcon(
-                    icon = actionIcon,
-                    contentDescription = actionContentDescription,
-                    tint = Primary
-                )
+            if (actionIcon != null) {
+                IconButton(onClick = { onActionClick?.invoke() }) {
+                    AppIcon(
+                        icon = actionIcon,
+                        contentDescription = actionContentDescription,
+                        tint = Primary
+                    )
+                }
             }
         }
     }

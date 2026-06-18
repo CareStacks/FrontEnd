@@ -49,9 +49,12 @@ data class UploadDocumentItemRequestDto(
     val title: String,
     val description: String,
     val fileUrl: String,
+    val storageBucket: String? = null,
+    val storagePath: String? = null,
     val mimeType: String,
     val fileSizeBytes: Long,
-    val uploadedAt: String?
+    val uploadedAt: String?,
+    val syncStatus: String? = null
 )
 
 data class MedicalDocumentDto(
@@ -68,9 +71,12 @@ data class DocumentItemDto(
     val title: String,
     val description: String?,
     val fileUrl: String,
+    val storageBucket: String? = null,
+    val storagePath: String? = null,
     val mimeType: String,
     val fileSizeBytes: Long,
-    val uploadedAt: String?
+    val uploadedAt: String?,
+    val syncStatus: String? = null
 )
 
 data class NotificationDto(

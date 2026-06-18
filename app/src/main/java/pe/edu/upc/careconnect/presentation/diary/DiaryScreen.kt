@@ -39,6 +39,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import pe.edu.upc.careconnect.R
 import pe.edu.upc.careconnect.data.local.CachedDiaryNoteEntity
+import pe.edu.upc.careconnect.data.remote.toUserMessage
 import pe.edu.upc.careconnect.data.repository.CareCacheRepository
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 import pe.edu.upc.careconnect.presentation.components.CareScreenHeader
@@ -72,7 +73,9 @@ fun DiaryScreen(
     var syncError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(repository) {
-        syncError = repository.safeSyncDiaryNotes().exceptionOrNull()?.message
+        syncError = repository.safeSyncDiaryNotes()
+            .exceptionOrNull()
+            ?.toUserMessage("No se pudieron sincronizar las notas")
     }
 
     Column(

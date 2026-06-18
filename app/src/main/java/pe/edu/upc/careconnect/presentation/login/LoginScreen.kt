@@ -250,6 +250,16 @@ fun LoginScreen(
                     return@FilledButton
                 }
 
+                if (!email.value.isValidEmailAddress()) {
+                    errorMessage = "Ingresa un correo electrónico válido."
+                    return@FilledButton
+                }
+
+                if (password.value.length < 8) {
+                    errorMessage = "La contraseña debe tener al menos 8 caracteres."
+                    return@FilledButton
+                }
+
                 scope.launch {
                     isLoading = true
                     runCatching {
@@ -260,7 +270,7 @@ fun LoginScreen(
                     }.onSuccess {
                         onLoginSuccess()
                     }.onFailure { throwable ->
-                        errorMessage = throwable.toUserMessage("No se pudo iniciar sesión")
+                        errorMessage = throwable.toUserMessage("Correo o contraseña incorrectos.")
                     }
                     isLoading = false
                 }

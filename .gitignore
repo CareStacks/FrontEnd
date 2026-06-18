@@ -8,6 +8,19 @@ build/
 # Local configuration file (sdk path, etc)
 local.properties
 
+# Environment files / secrets
+.env
+.env.local
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.mobileprovision
+secrets.properties
+supabase.env
+supabase.*.env
+
 # Log/OS Files
 *.log
 

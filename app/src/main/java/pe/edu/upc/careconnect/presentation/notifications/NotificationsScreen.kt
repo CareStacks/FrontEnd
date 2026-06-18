@@ -33,6 +33,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import pe.edu.upc.careconnect.R
 import pe.edu.upc.careconnect.data.local.CachedNotificationEntity
+import pe.edu.upc.careconnect.data.remote.toUserMessage
 import pe.edu.upc.careconnect.data.repository.CareCacheRepository
 import pe.edu.upc.careconnect.presentation.components.AppIcon
 import pe.edu.upc.careconnect.presentation.components.CareScreenHeader
@@ -67,7 +68,9 @@ fun NotificationsScreen(
     var syncError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(repository) {
-        syncError = repository.safeSyncNotifications().exceptionOrNull()?.message
+        syncError = repository.safeSyncNotifications()
+            .exceptionOrNull()
+            ?.toUserMessage("No se pudieron sincronizar las notificaciones")
     }
 
     Column(

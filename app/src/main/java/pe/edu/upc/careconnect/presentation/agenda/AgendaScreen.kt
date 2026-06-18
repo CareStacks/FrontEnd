@@ -44,8 +44,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDate
+import java.time.YearMonth
+import java.util.Locale
 import pe.edu.upc.careconnect.R
 import pe.edu.upc.careconnect.data.remote.HealthEventDto
+import pe.edu.upc.careconnect.data.remote.toUserMessage
 import pe.edu.upc.careconnect.data.repository.AgendaRepository
 import pe.edu.upc.careconnect.presentation.theme.Background
 import pe.edu.upc.careconnect.presentation.theme.Border
@@ -66,6 +70,7 @@ fun AgendaScreen(
 ) {
     val context = LocalContext.current
     val agendaRepository = remember(context) { AgendaRepository.getInstance(context) }
+    val today = remember { LocalDate.now() }
     var events by remember { mutableStateOf<List<HealthEventDto>>(emptyList()) }
     var syncError by remember { mutableStateOf<String?>(null) }
 
@@ -76,7 +81,7 @@ fun AgendaScreen(
             events = loadedEvents
             syncError = null
         }.onFailure { throwable ->
-            syncError = throwable.message
+            syncError = throwable.toUserMessage("No se pudo cargar la agenda")
         }
     }
 
@@ -102,11 +107,11 @@ fun AgendaScreen(
             contentPadding = PaddingValues(bottom = 20.dp)
         ) {
             item {
-                CalendarCard()
+                CalendarCard(currentDate = today)
 
                 Spacer(modifier = Modifier.height(28.dp))
 
-                EventsHeader()
+                EventsHeader(currentDate = today)
 
                 Spacer(modifier = Modifier.height(18.dp))
 
@@ -120,11 +125,7 @@ fun AgendaScreen(
                 }
 
                 if (events.isEmpty()) {
-                    Text(
-                        text = "No hay eventos cargados todavía.",
-                        color = TextSecondary,
-                        fontSize = 16.sp
-                    )
+                    EmptyAgendaState(onCreateClick = onAddEventClick)
                 } else {
                     events.forEachIndexed { index, event ->
                         val statusColors = agendaStatusColors(event.status)
@@ -168,6 +169,12 @@ fun AgendaScreen(
         }
     }
 }
+
+private data class CalendarDay(
+    val dayOfMonth: Int,
+    val isCurrentMonth: Boolean,
+    val isToday: Boolean
+)
 
 private data class AgendaStatusColors(
     val background: Color,
@@ -221,6 +228,43 @@ private fun agendaPeriod(rawValue: String?): String {
         .substringAfterLast(' ', "")
 }
 
+private fun LocalDate.monthTitle(): String {
+    val monthName = month.getDisplayName(java.time.format.TextStyle.FULL, Locale.getDefault())
+        .replaceFirstChar { character ->
+            if (character.isLowerCase()) character.titlecase(Locale.getDefault()) else character.toString()
+        }
+    return "$monthName $year"
+}
+
+private fun LocalDate.shortDateLabel(): String {
+    val monthName = month.getDisplayName(java.time.format.TextStyle.SHORT, Locale.getDefault())
+        .replace(".", "")
+        .uppercase(Locale.getDefault())
+    return "$monthName $dayOfMonth"
+}
+
+private fun LocalDate.calendarWeeks(): List<List<CalendarDay>> {
+    val currentMonth = YearMonth.from(this)
+    val firstDayOfMonth = currentMonth.atDay(1)
+    val daysFromPreviousMonth = firstDayOfMonth.dayOfWeek.value - 1
+    val firstVisibleDate = firstDayOfMonth.minusDays(daysFromPreviousMonth.toLong())
+    val weeks = mutableListOf<List<CalendarDay>>()
+
+    repeat(6) { weekIndex ->
+        val week = List(7) { dayIndex ->
+            val date = firstVisibleDate.plusDays((weekIndex * 7 + dayIndex).toLong())
+            CalendarDay(
+                dayOfMonth = date.dayOfMonth,
+                isCurrentMonth = YearMonth.from(date) == currentMonth,
+                isToday = date == this
+            )
+        }
+        weeks.add(week)
+    }
+
+    return weeks.dropLastWhile { week -> week.none { day -> day.isCurrentMonth } }
+}
+
 @Composable
 private fun AgendaHeader(
     onNotificationsClick: () -> Unit
@@ -266,7 +310,9 @@ private fun AgendaHeader(
 }
 
 @Composable
-private fun CalendarCard() {
+private fun CalendarCard(currentDate: LocalDate) {
+    val monthWeeks = remember(currentDate) { currentDate.calendarWeeks() }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -285,7 +331,7 @@ private fun CalendarCard() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Octubre 2023",
+                    text = currentDate.monthTitle(),
                     color = Primary,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
@@ -311,23 +357,13 @@ private fun CalendarCard() {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            CalendarDatesRow(
-                dates = listOf("25", "26", "27", "28", "29", "30", "1"),
-                mutedIndexes = listOf(0, 1, 2, 3, 4, 5)
-            )
+            monthWeeks.forEachIndexed { index, week ->
+                CalendarDatesRow(days = week)
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            CalendarDatesRow(
-                dates = listOf("2", "3", "4", "5", "6", "7", "8")
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            CalendarDatesRow(
-                dates = listOf("9", "10", "11", "12", "13", "14", "15"),
-                selectedIndex = 3
-            )
+                if (index != monthWeeks.lastIndex) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+            }
         }
     }
 }
@@ -367,22 +403,20 @@ private fun WeekDaysRow() {
 
 @Composable
 private fun CalendarDatesRow(
-    dates: List<String>,
-    selectedIndex: Int? = null,
-    mutedIndexes: List<Int> = emptyList()
+    days: List<CalendarDay>
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        dates.forEachIndexed { index, date ->
+        days.forEach { day ->
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(42.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (selectedIndex == index) {
+                if (day.isToday) {
                     Box(
                         modifier = Modifier
                             .size(42.dp)
@@ -391,7 +425,7 @@ private fun CalendarDatesRow(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = date,
+                            text = day.dayOfMonth.toString(),
                             color = Surface,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
@@ -399,8 +433,8 @@ private fun CalendarDatesRow(
                     }
                 } else {
                     Text(
-                        text = date,
-                        color = if (mutedIndexes.contains(index)) {
+                        text = day.dayOfMonth.toString(),
+                        color = if (!day.isCurrentMonth) {
                             TextMuted.copy(alpha = 0.65f)
                         } else {
                             TextPrimary
@@ -416,13 +450,13 @@ private fun CalendarDatesRow(
 }
 
 @Composable
-private fun EventsHeader() {
+private fun EventsHeader(currentDate: LocalDate) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "Eventos de hoy",
+            text = "Eventos creados",
             color = TextPrimary,
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
@@ -430,11 +464,83 @@ private fun EventsHeader() {
         )
 
         Text(
-            text = "OCT 12",
+            text = currentDate.shortDateLabel(),
             color = Primary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold
         )
+    }
+}
+
+@Composable
+private fun EmptyAgendaState(onCreateClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        border = BorderStroke(1.dp, Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Secondary.copy(alpha = 0.85f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_calendar),
+                    contentDescription = "Agenda vacía",
+                    tint = Color(0xFF4E6F61),
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "Aún no tienes eventos creados.",
+                color = TextPrimary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Crea tu primer recordatorio para comenzar.",
+                color = TextSecondary,
+                fontSize = 16.sp,
+                lineHeight = 22.sp,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Button(
+                onClick = onCreateClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Primary,
+                    contentColor = Surface
+                ),
+                contentPadding = PaddingValues(horizontal = 16.dp)
+            ) {
+                Text(
+                    text = "Crear recordatorio",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }
 

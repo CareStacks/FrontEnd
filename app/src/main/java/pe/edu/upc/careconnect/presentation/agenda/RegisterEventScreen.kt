@@ -1,6 +1,11 @@
 package pe.edu.upc.careconnect.presentation.agenda
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import androidx.compose.foundation.clickable
+import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import androidx.compose.foundation.BorderStroke
@@ -76,8 +81,8 @@ fun RegisterEventScreen(
     val scope = rememberCoroutineScope()
     var eventType by remember { mutableStateOf("Medicación") }
     var eventName by remember { mutableStateOf("") }
-    var eventDate by remember { mutableStateOf("") }
-    var eventTime by remember { mutableStateOf("") }
+    var eventDate by remember { mutableStateOf<LocalDate?>(null) }
+    var eventTime by remember { mutableStateOf<LocalTime?>(null) }
     var description by remember { mutableStateOf("") }
     var reminderEnabled by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -149,13 +154,11 @@ fun RegisterEventScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                AppInputField(
+                DatePickerField(
                     value = eventDate,
-                    onValueChange = {
-                        eventDate = it
-                    },
-                    placeholder = "mm/dd/yyyy",
-                    singleLine = true
+                    onValueChange = { selectedDate ->
+                        eventDate = selectedDate
+                    }
                 )
             }
 
@@ -168,13 +171,11 @@ fun RegisterEventScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                AppInputField(
+                TimePickerField(
                     value = eventTime,
-                    onValueChange = {
-                        eventTime = it
-                    },
-                    placeholder = "--:-- --",
-                    singleLine = true
+                    onValueChange = { selectedTime ->
+                        eventTime = selectedTime
+                    }
                 )
             }
         }
@@ -209,15 +210,22 @@ fun RegisterEventScreen(
         Button(
             onClick = {
                 errorMessage = null
-                val startAt = parseEventDateTime(eventDate, eventTime)
+                val selectedDate = eventDate
+                val selectedTime = eventTime
                 if (eventName.isBlank()) {
                     errorMessage = "Ingresá el nombre del evento."
                     return@Button
                 }
-                if (startAt == null) {
-                    errorMessage = "Usá fecha `mm/dd/yyyy` y hora `hh:mm AM/PM`."
+                if (selectedDate == null) {
+                    errorMessage = "Seleccioná la fecha del evento."
                     return@Button
                 }
+                if (selectedTime == null) {
+                    errorMessage = "Seleccioná la hora del evento."
+                    return@Button
+                }
+
+                val startAt = LocalDateTime.of(selectedDate, selectedTime)
 
                 scope.launch {
                     isSaving = true
@@ -292,17 +300,12 @@ private fun String.toBackendEventType(): String {
     }
 }
 
-private fun parseEventDateTime(date: String, time: String): LocalDateTime? {
-    val value = "${date.trim()} ${time.trim()}"
-    val formatters = listOf(
-        DateTimeFormatter.ofPattern("MM/dd/yyyy hh:mm a", Locale.US),
-        DateTimeFormatter.ofPattern("M/d/yyyy hh:mm a", Locale.US)
-    )
+private val EventDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.getDefault())
+private val EventTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("hh:mm a", Locale.getDefault())
 
-    return formatters.firstNotNullOfOrNull { formatter ->
-        runCatching { LocalDateTime.parse(value, formatter) }.getOrNull()
-    }
-}
+private fun LocalDate.toEventDateText(): String = format(EventDateFormatter)
+
+private fun LocalTime.toEventTimeText(): String = format(EventTimeFormatter)
 
 @Composable
 private fun RegisterEventHeader(
@@ -399,6 +402,104 @@ private fun SelectEventTypeField(
                 contentDescription = "Seleccionar tipo de evento",
                 tint = Neutral,
                 modifier = Modifier.size(26.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DatePickerField(
+    value: LocalDate?,
+    onValueChange: (LocalDate) -> Unit
+) {
+    val context = LocalContext.current
+
+    AppPickerField(
+        value = value?.toEventDateText().orEmpty(),
+        placeholder = "Seleccionar fecha",
+        iconRes = R.drawable.ic_calendar,
+        contentDescription = "Seleccionar fecha del evento",
+        onClick = {
+            val initialDate = value ?: LocalDate.now()
+            DatePickerDialog(
+                context,
+                { _, year, month, dayOfMonth ->
+                    onValueChange(LocalDate.of(year, month + 1, dayOfMonth))
+                },
+                initialDate.year,
+                initialDate.monthValue - 1,
+                initialDate.dayOfMonth
+            ).show()
+        }
+    )
+}
+
+@Composable
+private fun TimePickerField(
+    value: LocalTime?,
+    onValueChange: (LocalTime) -> Unit
+) {
+    val context = LocalContext.current
+
+    AppPickerField(
+        value = value?.toEventTimeText().orEmpty(),
+        placeholder = "Seleccionar hora",
+        iconRes = R.drawable.ic_clock,
+        contentDescription = "Seleccionar hora del evento",
+        onClick = {
+            val initialTime = value ?: LocalTime.now()
+            TimePickerDialog(
+                context,
+                { _, hourOfDay, minute ->
+                    onValueChange(LocalTime.of(hourOfDay, minute))
+                },
+                initialTime.hour,
+                initialTime.minute,
+                false
+            ).show()
+        }
+    )
+}
+
+@Composable
+private fun AppPickerField(
+    value: String,
+    placeholder: String,
+    iconRes: Int,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Surface)
+            .border(
+                width = 1.dp,
+                color = Border,
+                shape = RoundedCornerShape(10.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = value.ifBlank { placeholder },
+                color = if (value.isBlank()) TextSecondary.copy(alpha = 0.82f) else TextPrimary,
+                fontSize = 16.sp,
+                modifier = Modifier.weight(1f)
+            )
+
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = contentDescription,
+                tint = Neutral,
+                modifier = Modifier.size(24.dp)
             )
         }
     }

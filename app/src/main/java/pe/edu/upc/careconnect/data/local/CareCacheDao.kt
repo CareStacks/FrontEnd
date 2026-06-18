@@ -29,6 +29,18 @@ interface CareCacheDao {
     @Query("DELETE FROM cached_documents")
     suspend fun clearDocuments()
 
+    @Query("DELETE FROM cached_documents WHERE syncStatus = 'SYNCED'")
+    suspend fun clearSyncedDocuments()
+
+    @Query("DELETE FROM cached_documents WHERE id = :documentId")
+    suspend fun deleteDocument(documentId: String)
+
+    @Query("SELECT * FROM cached_documents WHERE id = :documentId LIMIT 1")
+    suspend fun getDocumentById(documentId: String): CachedDocumentEntity?
+
+    @Query("SELECT * FROM cached_documents WHERE syncStatus IN ('PENDING', 'UPLOADING', 'ERROR') ORDER BY sortOrder ASC")
+    suspend fun getPendingDocuments(): List<CachedDocumentEntity>
+
     @Query("DELETE FROM cached_diary_notes")
     suspend fun clearDiaryNotes()
 

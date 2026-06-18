@@ -2,16 +2,26 @@ package pe.edu.upc.careconnect.data.repository
 
 import android.content.Context
 import android.net.Uri
+import java.io.File
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import pe.edu.upc.careconnect.data.local.CachedDiaryNoteEntity
 import pe.edu.upc.careconnect.data.local.CachedDocumentEntity
 import pe.edu.upc.careconnect.data.local.CachedNotificationEntity
 import pe.edu.upc.careconnect.data.local.CareCacheDatabase
 import pe.edu.upc.careconnect.data.remote.ApiClient
-import pe.edu.upc.careconnect.data.remote.UploadDocumentItemRequestDto
+import pe.edu.upc.careconnect.data.remote.DocumentItemDto
 import pe.edu.upc.careconnect.data.remote.toUserMessage
 import pe.edu.upc.careconnect.data.session.SessionManager
 
@@ -22,12 +32,14 @@ class CareCacheRepository private constructor(
     private val dao = database.careCacheDao()
     private val api = ApiClient.service
     private val sessionManager = SessionManager.getInstance(context)
+    private val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val documents = dao.observeDocuments()
     val diaryNotes = dao.observeDiaryNotes()
     val notifications = dao.observeNotifications()
 
     suspend fun syncDocuments() {
+        val localPendingDocuments = dao.getPendingDocuments()
         val patientId = sessionManager.requireActivePatientId()
         val remoteDocuments = api.getDocumentsByPatient(patientId)
         val cachedDocuments = remoteDocuments
@@ -40,19 +52,31 @@ class CareCacheRepository private constructor(
                     CachedDocumentEntity(
                         id = item.id.toString(),
                         title = item.title,
+                        backendDocumentType = item.documentType,
                         type = item.documentType.toDisplayDocumentType(),
                         date = item.uploadedAt.toReadableDate(),
                         section = if (index < 3) "RECIENTES" else "HISTORIAL ANUAL",
                         tone = item.documentType.toDocumentTone(),
                         description = item.description.orEmpty(),
-                        sortOrder = -(item.id)
+                        sortOrder = -(item.id),
+                        localUri = null,
+                        storageBucket = item.storageBucket.orEmpty(),
+                        storagePath = item.storagePath.orEmpty(),
+                        mimeType = item.mimeType,
+                        fileSizeBytes = item.fileSizeBytes,
+                        uploadedAt = item.uploadedAt,
+                        syncStatus = item.syncStatus ?: DOCUMENT_STATUS_SYNCED,
+                        errorMessage = null
                     )
                 }
             }
 
-        dao.clearDocuments()
+        dao.clearSyncedDocuments()
         if (cachedDocuments.isNotEmpty()) {
             dao.upsertDocuments(cachedDocuments)
+        }
+        if (localPendingDocuments.isNotEmpty()) {
+            dao.upsertDocuments(localPendingDocuments)
         }
     }
 
@@ -132,21 +156,58 @@ class CareCacheRepository private constructor(
         fileSizeBytes: Long,
         uploadedAt: LocalDateTime?
     ) {
-        val medicalDocumentId = ensureMedicalDocumentId()
-        api.uploadDocumentItem(
-            medicalDocumentId = medicalDocumentId,
-            request = UploadDocumentItemRequestDto(
-                documentType = documentType,
-                title = title,
+        if (fileSizeBytes > MAX_DOCUMENT_SIZE_BYTES) {
+            throw IllegalArgumentException("El archivo supera el tamaño permitido.")
+        }
+
+        val localId = "local-${UUID.randomUUID()}"
+        val uploadDate = uploadedAt ?: LocalDateTime.now()
+        val localFile = copyDocumentToLocalStorage(
+            sourceUri = fileUri,
+            localId = localId,
+            title = title
+        )
+        val actualFileSize = maxOf(fileSizeBytes, localFile.length())
+        if (actualFileSize > MAX_DOCUMENT_SIZE_BYTES) {
+            localFile.delete()
+            throw IllegalArgumentException("El archivo supera el tamaño permitido.")
+        }
+
+        dao.upsertDocument(
+            CachedDocumentEntity(
+                id = localId,
+                title = title.ifBlank { "Documento médico" },
+                backendDocumentType = documentType,
+                type = documentType.toDisplayDocumentType(),
+                date = uploadDate.format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())),
+                section = "RECIENTES",
+                tone = documentType.toDocumentTone(),
                 description = description,
-                fileUrl = fileUri.toString(),
+                sortOrder = -System.currentTimeMillis(),
+                localUri = localFile.absolutePath,
+                storageBucket = "",
+                storagePath = "",
                 mimeType = mimeType,
-                fileSizeBytes = fileSizeBytes,
-                uploadedAt = (uploadedAt ?: LocalDateTime.now()).format(API_DATE_TIME_FORMATTER)
+                fileSizeBytes = actualFileSize,
+                uploadedAt = uploadDate.format(API_DATE_TIME_FORMATTER),
+                syncStatus = DOCUMENT_STATUS_UPLOADING,
+                errorMessage = null
             )
         )
 
-        syncDocuments()
+        uploadScope.launch {
+            uploadCachedDocument(localId)
+        }
+    }
+
+    fun retryPendingDocumentUploads() {
+        uploadScope.launch {
+            dao.getPendingDocuments().forEach { document ->
+                if (!document.localUri.isNullOrBlank()) {
+                    uploadCachedDocument(document.id)
+                }
+            }
+        }
     }
 
     suspend fun syncAllCaches() {
@@ -194,6 +255,105 @@ class CareCacheRepository private constructor(
         } ?: this
     }
 
+    private fun copyDocumentToLocalStorage(sourceUri: Uri, localId: String, title: String): File {
+        val targetDirectory = File(context.filesDir, "pending_documents").apply { mkdirs() }
+        val targetFile = File(targetDirectory, "$localId-${title.sanitizeFileName()}")
+
+        context.contentResolver.openInputStream(sourceUri)?.use { input ->
+            targetFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        } ?: throw IllegalArgumentException("No se pudo abrir el archivo seleccionado.")
+
+        return targetFile
+    }
+
+    private suspend fun uploadCachedDocument(documentId: String) {
+        val document = dao.getDocumentById(documentId) ?: return
+        val localPath = document.localUri
+        val localFile = localPath?.let { File(it) }
+
+        if (localFile == null || !localFile.exists()) {
+            dao.upsertDocument(
+                document.copy(
+                    syncStatus = DOCUMENT_STATUS_ERROR,
+                    errorMessage = "No se encontró el archivo local para subirlo."
+                )
+            )
+            return
+        }
+
+        dao.upsertDocument(
+            document.copy(
+                syncStatus = DOCUMENT_STATUS_UPLOADING,
+                errorMessage = null
+            )
+        )
+
+        runCatching {
+            val medicalDocumentId = ensureMedicalDocumentId()
+            val mediaType = document.mimeType.ifBlank { "application/octet-stream" }.toMediaTypeOrNull()
+            val filePart = MultipartBody.Part.createFormData(
+                name = "file",
+                filename = document.title,
+                body = localFile.asRequestBody(mediaType)
+            )
+
+            api.uploadDocumentFile(
+                medicalDocumentId = medicalDocumentId,
+                file = filePart,
+                documentType = document.backendDocumentType.toPlainRequestBody(),
+                title = document.title.toPlainRequestBody(),
+                description = document.description.takeIf { it.isNotBlank() }?.toPlainRequestBody(),
+                uploadedAt = document.uploadedAt?.toPlainRequestBody()
+            )
+        }.onSuccess { medicalDocument ->
+            val uploadedItem = medicalDocument.documentItems.maxByOrNull { item -> item.id }
+            if (uploadedItem == null) {
+                dao.upsertDocument(
+                    document.copy(
+                        syncStatus = DOCUMENT_STATUS_ERROR,
+                        errorMessage = "No se pudo confirmar la subida del documento."
+                    )
+                )
+                return
+            }
+
+            dao.upsertDocument(uploadedItem.toCachedDocument(section = "RECIENTES"))
+            dao.deleteDocument(document.id)
+            localFile.delete()
+        }.onFailure { throwable ->
+            dao.upsertDocument(
+                document.copy(
+                    syncStatus = DOCUMENT_STATUS_ERROR,
+                    errorMessage = throwable.toUserMessage("No se pudo subir el documento. Inténtalo nuevamente.")
+                )
+            )
+        }
+    }
+
+    private fun DocumentItemDto.toCachedDocument(section: String): CachedDocumentEntity {
+        return CachedDocumentEntity(
+            id = id.toString(),
+            title = title,
+            backendDocumentType = documentType,
+            type = documentType.toDisplayDocumentType(),
+            date = uploadedAt.toReadableDate(),
+            section = section,
+            tone = documentType.toDocumentTone(),
+            description = description.orEmpty(),
+            sortOrder = -id,
+            localUri = null,
+            storageBucket = storageBucket.orEmpty(),
+            storagePath = storagePath.orEmpty(),
+            mimeType = mimeType,
+            fileSizeBytes = fileSizeBytes,
+            uploadedAt = uploadedAt,
+            syncStatus = syncStatus ?: DOCUMENT_STATUS_SYNCED,
+            errorMessage = null
+        )
+    }
+
     companion object {
         @Volatile
         private var instance: CareCacheRepository? = null
@@ -212,6 +372,19 @@ class CareCacheRepository private constructor(
 }
 
 private val API_DATE_TIME_FORMATTER: DateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+private const val MAX_DOCUMENT_SIZE_BYTES: Long = 10L * 1024L * 1024L
+private const val DOCUMENT_STATUS_PENDING = "PENDING"
+private const val DOCUMENT_STATUS_UPLOADING = "UPLOADING"
+private const val DOCUMENT_STATUS_SYNCED = "SYNCED"
+private const val DOCUMENT_STATUS_ERROR = "ERROR"
+
+private fun String.toPlainRequestBody() = toRequestBody("text/plain".toMediaTypeOrNull())
+
+private fun String.sanitizeFileName(): String {
+    return ifBlank { "documento-medico" }
+        .replace(Regex("[^A-Za-z0-9._-]"), "-")
+        .replace(Regex("-+"), "-")
+}
 
 private fun String?.toReadableDate(): String {
     if (this.isNullOrBlank()) {

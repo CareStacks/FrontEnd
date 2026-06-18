@@ -2,7 +2,6 @@ package pe.edu.upc.careconnect.presentation.home
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,36 +28,66 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.time.LocalDateTime
 import pe.edu.upc.careconnect.R
+import pe.edu.upc.careconnect.data.remote.HealthEventDto
+import pe.edu.upc.careconnect.data.remote.toUserMessage
+import pe.edu.upc.careconnect.data.repository.AgendaRepository
 import pe.edu.upc.careconnect.presentation.theme.Background
 import pe.edu.upc.careconnect.presentation.theme.Border
 import pe.edu.upc.careconnect.presentation.theme.Neutral
 import pe.edu.upc.careconnect.presentation.theme.Primary
 import pe.edu.upc.careconnect.presentation.theme.Secondary
 import pe.edu.upc.careconnect.presentation.theme.Surface
-import pe.edu.upc.careconnect.presentation.theme.Tertiary
 import pe.edu.upc.careconnect.presentation.theme.TextPrimary
 import pe.edu.upc.careconnect.presentation.theme.TextSecondary
 
 @Composable
 fun HomeScreen(
     modifier: Modifier = Modifier,
-    userName: String = "Mariana",
+    userName: String = "Usuario",
     onRegisterEventClick: () -> Unit = {},
     onUploadDocumentClick: () -> Unit = {},
     onWriteNoteClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
+    val agendaRepository = remember(context) { AgendaRepository.getInstance(context) }
+    var events by remember { mutableStateOf<List<HealthEventDto>>(emptyList()) }
+    var isLoadingEvents by remember { mutableStateOf(true) }
+    var syncError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(agendaRepository) {
+        isLoadingEvents = true
+        runCatching {
+            agendaRepository.getAgendaEvents()
+        }.onSuccess { loadedEvents ->
+            events = loadedEvents
+            syncError = null
+        }.onFailure { throwable ->
+            syncError = throwable.toUserMessage("No se pudieron cargar tus eventos")
+        }
+        isLoadingEvents = false
+    }
+
+    val nextEvent = remember(events) {
+        events.nextHomeEvent()
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -76,15 +105,21 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(22.dp))
 
-        MedicationReminderCard()
+        syncError?.let { message ->
+            HomeErrorText(message = message)
+
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        when {
+            isLoadingEvents -> LoadingEventsCard()
+            nextEvent == null -> EmptyEventsCard(onCreateClick = onRegisterEventClick)
+            else -> UpcomingEventCard(event = nextEvent)
+        }
 
         Spacer(modifier = Modifier.height(22.dp))
 
-        DailySummaryCard()
-
-        Spacer(modifier = Modifier.height(22.dp))
-
-        WellnessCard()
+        DailySummaryCard(events = events)
 
         Spacer(modifier = Modifier.height(22.dp))
 
@@ -161,7 +196,128 @@ private fun HomeHeader(
 }
 
 @Composable
-private fun MedicationReminderCard() {
+private fun HomeErrorText(message: String) {
+    Text(
+        text = message,
+        color = Color(0xFFB91C1C),
+        fontSize = 14.sp,
+        lineHeight = 20.sp
+    )
+}
+
+@Composable
+private fun LoadingEventsCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        border = BorderStroke(1.dp, Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp)
+        ) {
+            Text(
+                text = "Cargando tus eventos...",
+                color = Primary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Estamos revisando tus recordatorios guardados.",
+                color = TextSecondary,
+                fontSize = 16.sp,
+                lineHeight = 22.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyEventsCard(onCreateClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Surface),
+        border = BorderStroke(1.dp, Border),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(Secondary.copy(alpha = 0.85f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_calendar),
+                        contentDescription = "Eventos",
+                        tint = Color(0xFF4E6F61),
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "Aún no tienes eventos creados.",
+                        color = TextPrimary,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 24.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Crea tu primer recordatorio para comenzar.",
+                        color = TextSecondary,
+                        fontSize = 16.sp,
+                        lineHeight = 22.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Button(
+                onClick = onCreateClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Primary,
+                    contentColor = Surface
+                ),
+                contentPadding = PaddingValues(horizontal = 16.dp)
+            ) {
+                Text(
+                    text = "Crear recordatorio",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpcomingEventCard(event: HealthEventDto) {
+    val statusColors = homeStatusColors(event.status)
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -183,8 +339,8 @@ private fun MedicationReminderCard() {
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        painter = painterResource(id = R.drawable.ic_medical),
-                        contentDescription = "Medicación",
+                        painter = painterResource(id = homeEventIcon(event.type)),
+                        contentDescription = homeEventTypeLabel(event.type),
                         tint = Surface,
                         modifier = Modifier.size(28.dp)
                     )
@@ -199,72 +355,80 @@ private fun MedicationReminderCard() {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Medicación -",
+                            text = homeEventTypeLabel(event.type),
                             color = Primary,
                             fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        PendingBadge()
+                        HomeStatusBadge(
+                            text = homeStatusLabel(event.status),
+                            backgroundColor = statusColors.background,
+                            textColor = statusColors.content
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))
 
                     Text(
-                        text = "8:00 a. m.",
+                        text = AgendaRepository.formatEventTimeRange(event.startAt, event.endAt),
                         color = Primary,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "Losartán 50mg • 1\ncomprimido",
+                        text = AgendaRepository.formatEventDate(event.startAt),
                         color = TextSecondary,
-                        fontSize = 16.sp,
-                        lineHeight = 22.sp
+                        fontSize = 14.sp
                     )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = event.title.ifBlank { "Evento sin título" },
+                        color = TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 21.sp
+                    )
+
+                    val description = event.description.orEmpty().trim()
+                    if (description.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = description,
+                            color = TextSecondary,
+                            fontSize = 16.sp,
+                            lineHeight = 22.sp
+                        )
+                    }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Button(
-                onClick = {},
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Primary,
-                    contentColor = Surface
-                ),
-                contentPadding = PaddingValues(horizontal = 16.dp)
-            ) {
-                Text(
-                    text = "Confirmar toma",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold
-                )
             }
         }
     }
 }
 
 @Composable
-private fun PendingBadge() {
+private fun HomeStatusBadge(
+    text: String,
+    backgroundColor: Color,
+    textColor: Color
+) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .background(Tertiary.copy(alpha = 0.35f))
+            .background(backgroundColor)
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         Text(
-            text = "PENDIENTE",
-            color = Neutral,
+            text = text,
+            color = textColor,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium
         )
@@ -272,7 +436,11 @@ private fun PendingBadge() {
 }
 
 @Composable
-private fun DailySummaryCard() {
+private fun DailySummaryCard(events: List<HealthEventDto>) {
+    val pendingCount = events.count { it.status == "PENDING" }
+    val confirmedCount = events.count { it.status == "CONFIRMED" }
+    val missedCount = events.count { it.status == "MISSED" }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -287,7 +455,7 @@ private fun DailySummaryCard() {
             )
         ) {
             Text(
-                text = "RESUMEN DEL DÍA",
+                text = "RESUMEN DE EVENTOS",
                 color = Neutral,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium
@@ -300,7 +468,7 @@ private fun DailySummaryCard() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SummaryItem(
-                    value = "4",
+                    value = pendingCount.toString(),
                     label = "PENDIENTES",
                     valueColor = Primary,
                     modifier = Modifier.weight(1f)
@@ -309,7 +477,7 @@ private fun DailySummaryCard() {
                 SummaryDivider()
 
                 SummaryItem(
-                    value = "12",
+                    value = confirmedCount.toString(),
                     label = "CONFIRMADOS",
                     valueColor = Color(0xFF4E6F61),
                     modifier = Modifier.weight(1f)
@@ -318,7 +486,7 @@ private fun DailySummaryCard() {
                 SummaryDivider()
 
                 SummaryItem(
-                    value = "0",
+                    value = missedCount.toString(),
                     label = "INCUMPLIDOS",
                     valueColor = Color(0xFFB91C1C),
                     modifier = Modifier.weight(1f)
@@ -367,56 +535,78 @@ private fun SummaryDivider() {
     )
 }
 
-@Composable
-private fun WellnessCard() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(192.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Neutral)
-    ) {
-        Image(
-            painter = painterResource(id = R.drawable.img_wellness_home),
-            contentDescription = "Bienestar hoy",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
+private data class HomeStatusColors(
+    val background: Color,
+    val content: Color
+)
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.62f)
-                        )
-                    )
-                )
-        )
+private fun List<HealthEventDto>.nextHomeEvent(): HealthEventDto? {
+    val now = LocalDateTime.now()
+    val activeEvents = filterNot { event -> event.status == "CANCELLED" }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(24.dp)
-        ) {
-            Text(
-                text = "Bienestar hoy",
-                color = Surface,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text(
-                text = "Recuerda completar el diario de ánimo\ndespués de comer.",
-                color = Surface.copy(alpha = 0.95f),
-                fontSize = 16.sp,
-                lineHeight = 23.sp
-            )
+    return activeEvents
+        .filter { event ->
+            val start = event.startDateTimeOrNull()
+            start == null || !start.isBefore(now)
         }
+        .minByOrNull { event -> event.startAt.orEmpty() }
+        ?: activeEvents.minByOrNull { event -> event.startAt.orEmpty() }
+}
+
+private fun HealthEventDto.startDateTimeOrNull(): LocalDateTime? {
+    return startAt?.let { value ->
+        runCatching { LocalDateTime.parse(value) }.getOrNull()
+    }
+}
+
+private fun homeStatusColors(status: String): HomeStatusColors {
+    return when (status) {
+        "CONFIRMED" -> HomeStatusColors(
+            background = Secondary.copy(alpha = 0.8f),
+            content = Color(0xFF4E6F61)
+        )
+        "PENDING" -> HomeStatusColors(
+            background = Primary.copy(alpha = 0.16f),
+            content = Neutral
+        )
+        "MISSED" -> HomeStatusColors(
+            background = Color(0xFFFFD2D2),
+            content = Color(0xFFB91C1C)
+        )
+        else -> HomeStatusColors(
+            background = Color(0xFFFFD8B8),
+            content = Color(0xFFA85E00)
+        )
+    }
+}
+
+private fun homeStatusLabel(status: String): String {
+    return when (status) {
+        "CONFIRMED" -> "COMPLETADO"
+        "PENDING" -> "PENDIENTE"
+        "MISSED" -> "INCUMPLIDO"
+        "CANCELLED" -> "CANCELADO"
+        else -> status.ifBlank { "EVENTO" }
+    }
+}
+
+private fun homeEventTypeLabel(type: String): String {
+    return when (type) {
+        "MEDICATION" -> "Medicación"
+        "APPOINTMENT" -> "Cita médica"
+        "THERAPY" -> "Terapia"
+        "CARE_ACTIVITY" -> "Actividad de cuidado"
+        else -> "Evento"
+    }
+}
+
+@DrawableRes
+private fun homeEventIcon(type: String): Int {
+    return when (type) {
+        "MEDICATION" -> R.drawable.ic_medical
+        "APPOINTMENT" -> R.drawable.ic_calendar
+        "THERAPY", "CARE_ACTIVITY" -> R.drawable.ic_note
+        else -> R.drawable.ic_calendar
     }
 }
 
