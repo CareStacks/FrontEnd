@@ -137,7 +137,7 @@ fun ShareProfileScreen(
                             )
                         }.onSuccess { consent ->
                             feedback = ShareFeedback.Success(
-                                "Perfil compartido con ${consent.caregiverFullName ?: trimmedEmail}."
+                                "Invitación enviada a ${consent.caregiverFullName ?: trimmedEmail}."
                             )
                         }.onFailure { throwable ->
                             feedback = ShareFeedback.Error(
