@@ -1,7 +1,8 @@
 package pe.edu.upc.careconnect.presentation.agenda
 
+import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
+import java.time.LocalTime
 import java.util.Locale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -76,8 +77,8 @@ fun RegisterEventScreen(
     val scope = rememberCoroutineScope()
     var eventType by remember { mutableStateOf("Medicación") }
     var eventName by remember { mutableStateOf("") }
-    var eventDate by remember { mutableStateOf("") }
-    var eventTime by remember { mutableStateOf("") }
+    var eventDate by remember { mutableStateOf<LocalDate?>(null) }
+    var eventTime by remember { mutableStateOf<LocalTime?>(null) }
     var description by remember { mutableStateOf("") }
     var reminderEnabled by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -149,13 +150,12 @@ fun RegisterEventScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                AppInputField(
-                    value = eventDate,
-                    onValueChange = {
+                AgendaDatePickerField(
+                    selectedDate = eventDate,
+                    onDateSelected = {
                         eventDate = it
                     },
-                    placeholder = "mm/dd/yyyy",
-                    singleLine = true
+                    placeholder = "Elegir fecha"
                 )
             }
 
@@ -168,13 +168,12 @@ fun RegisterEventScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                AppInputField(
-                    value = eventTime,
-                    onValueChange = {
+                AgendaTimePickerField(
+                    selectedTime = eventTime,
+                    onTimeSelected = {
                         eventTime = it
                     },
-                    placeholder = "--:-- --",
-                    singleLine = true
+                    placeholder = "Elegir hora"
                 )
             }
         }
@@ -209,15 +208,17 @@ fun RegisterEventScreen(
         Button(
             onClick = {
                 errorMessage = null
-                val startAt = parseEventDateTime(eventDate, eventTime)
+                val selectedDate = eventDate
+                val selectedTime = eventTime
                 if (eventName.isBlank()) {
                     errorMessage = "Ingresá el nombre del evento."
                     return@Button
                 }
-                if (startAt == null) {
-                    errorMessage = "Usá fecha `mm/dd/yyyy` y hora `hh:mm AM/PM`."
+                if (selectedDate == null || selectedTime == null) {
+                    errorMessage = "Seleccioná la fecha y hora del evento."
                     return@Button
                 }
+                val startAt = LocalDateTime.of(selectedDate, selectedTime)
 
                 scope.launch {
                     isSaving = true
@@ -289,18 +290,6 @@ private fun String.toBackendEventType(): String {
         "cita médica" -> "APPOINTMENT"
         "terapia" -> "THERAPY"
         else -> "CARE_ACTIVITY"
-    }
-}
-
-private fun parseEventDateTime(date: String, time: String): LocalDateTime? {
-    val value = "${date.trim()} ${time.trim()}"
-    val formatters = listOf(
-        DateTimeFormatter.ofPattern("MM/dd/yyyy hh:mm a", Locale.US),
-        DateTimeFormatter.ofPattern("M/d/yyyy hh:mm a", Locale.US)
-    )
-
-    return formatters.firstNotNullOfOrNull { formatter ->
-        runCatching { LocalDateTime.parse(value, formatter) }.getOrNull()
     }
 }
 

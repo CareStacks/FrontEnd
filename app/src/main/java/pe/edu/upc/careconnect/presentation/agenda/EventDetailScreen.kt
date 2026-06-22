@@ -22,8 +22,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,14 +40,12 @@ import pe.edu.upc.careconnect.data.remote.toUserMessage
 import pe.edu.upc.careconnect.data.repository.AgendaRepository
 import pe.edu.upc.careconnect.presentation.components.CareScreenHeader
 import pe.edu.upc.careconnect.presentation.theme.Background
-import pe.edu.upc.careconnect.presentation.theme.Border
 import pe.edu.upc.careconnect.presentation.theme.Primary
 import pe.edu.upc.careconnect.presentation.theme.PrimaryLight
 import pe.edu.upc.careconnect.presentation.theme.Surface
 import pe.edu.upc.careconnect.presentation.theme.TextPrimary
 import pe.edu.upc.careconnect.presentation.theme.TextSecondary
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
@@ -402,8 +398,9 @@ private fun RescheduleEventDialog(
     onDismiss: () -> Unit,
     onConfirm: (LocalDateTime, LocalDateTime) -> Unit
 ) {
-    var date by remember(event.id) { mutableStateOf(event.startAt.toEditableDate()) }
-    var time by remember(event.id) { mutableStateOf(event.startAt.toEditableTime()) }
+    val initialDateTime = remember(event.id) { event.startAt.toEventDateTime() }
+    var date by remember(event.id) { mutableStateOf(initialDateTime?.toLocalDate()) }
+    var time by remember(event.id) { mutableStateOf(initialDateTime?.toLocalTime()) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
@@ -412,37 +409,25 @@ private fun RescheduleEventDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Usá fecha `mm/dd/yyyy` y hora `hh:mm AM/PM`. El backend solo permite actualizar horario, no ubicación ni profesional porque esos campos no existen.",
+                    text = "Seleccioná la nueva fecha y hora. El backend solo permite actualizar horario, no ubicación ni profesional porque esos campos no existen.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary
                 )
-                OutlinedTextField(
-                    value = date,
-                    onValueChange = {
+                AgendaDatePickerField(
+                    selectedDate = date,
+                    onDateSelected = {
                         date = it
                         validationError = null
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Fecha") },
-                    placeholder = { Text("mm/dd/yyyy") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Primary,
-                        unfocusedBorderColor = Border
-                    )
+                    placeholder = "Elegir fecha"
                 )
-                OutlinedTextField(
-                    value = time,
-                    onValueChange = {
+                AgendaTimePickerField(
+                    selectedTime = time,
+                    onTimeSelected = {
                         time = it
                         validationError = null
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Hora") },
-                    placeholder = { Text("hh:mm AM/PM") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Primary,
-                        unfocusedBorderColor = Border
-                    )
+                    placeholder = "Elegir hora"
                 )
                 validationError?.let {
                     Text(
@@ -456,10 +441,12 @@ private fun RescheduleEventDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    val startAt = parseEventDateTime(date, time)
-                    if (startAt == null) {
-                        validationError = "Ingresá una fecha y hora válidas."
+                    val selectedDate = date
+                    val selectedTime = time
+                    if (selectedDate == null || selectedTime == null) {
+                        validationError = "Seleccioná una fecha y hora válidas."
                     } else {
+                        val startAt = LocalDateTime.of(selectedDate, selectedTime)
                         onConfirm(startAt, startAt.plusHours(1))
                     }
                 }
@@ -495,28 +482,7 @@ private fun String.toDisplayType(): String {
     }
 }
 
-private fun String?.toEditableDate(): String {
-    if (this.isNullOrBlank()) return ""
-    return runCatching {
-        LocalDateTime.parse(this).format(DateTimeFormatter.ofPattern("MM/dd/yyyy", Locale.US))
-    }.getOrDefault("")
-}
-
-private fun String?.toEditableTime(): String {
-    if (this.isNullOrBlank()) return ""
-    return runCatching {
-        LocalDateTime.parse(this).format(DateTimeFormatter.ofPattern("hh:mm a", Locale.US))
-    }.getOrDefault("")
-}
-
-private fun parseEventDateTime(date: String, time: String): LocalDateTime? {
-    val value = "${date.trim()} ${time.trim()}"
-    val formatters = listOf(
-        DateTimeFormatter.ofPattern("MM/dd/yyyy hh:mm a", Locale.US),
-        DateTimeFormatter.ofPattern("M/d/yyyy hh:mm a", Locale.US)
-    )
-
-    return formatters.firstNotNullOfOrNull { formatter ->
-        runCatching { LocalDateTime.parse(value, formatter) }.getOrNull()
-    }
+private fun String?.toEventDateTime(): LocalDateTime? {
+    if (this.isNullOrBlank()) return null
+    return runCatching { LocalDateTime.parse(this) }.getOrNull()
 }
